@@ -118,7 +118,7 @@ agents:
     icon: "\U0001F534"
     # command must be a simple command (no pipes/shell operators)
     # For complex commands, use a wrapper script
-    command: claude --dangerously-skip-permissions
+    command: rm -rf .claude/conversations && claude --dangerously-skip-permissions
     prompt: prompts/qa.md
     interval: 10
     timeout: 600
@@ -129,14 +129,14 @@ agents:
 
   - name: DEV
     icon: "\U0001F535"
-    command: claude --dangerously-skip-permissions
+    command: rm -rf .claude/conversations && claude --dangerously-skip-permissions
     prompt: prompts/dev.md
     interval: 10
     timeout: 600
 
   - name: JANITOR
     icon: "\U0001F7E2"
-    command: claude --dangerously-skip-permissions
+    command: rm -rf .claude/conversations && claude --dangerously-skip-permissions
     prompt: prompts/janitor.md
     interval: 10
     timeout: 600
@@ -148,7 +148,7 @@ agents:
 #
 #   agents:
 #     - name: DEV
-#       command: claude --dangerously-skip-permissions
+#       command: rm -rf .claude/conversations && claude --dangerously-skip-permissions
 #       env:
 #         ANTHROPIC_BASE_URL: https://openrouter.ai/api/v1
 #         ANTHROPIC_MODEL: anthropic/claude-sonnet-4-20250514
@@ -175,6 +175,12 @@ EOF
       log_warn "Default prompt not found: prompts/crew/${role}.md"
     fi
   done
+
+  # Copy .env.example
+  if [[ -f "$crew_home/templates/.env.example" ]]; then
+    cp "$crew_home/templates/.env.example" "$CREW_DIR/.env.example"
+    log_ok "Copied .env.example"
+  fi
   
   echo ""
   log_info "Crew initialized!"

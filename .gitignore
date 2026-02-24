@@ -16,5 +16,6 @@ docs/EVAL.md
 
 # Local config overrides
 .crew/crew.local.yaml
+.crew/.env
 .design/design.local.yaml
 docs/SESSION_LOG.md

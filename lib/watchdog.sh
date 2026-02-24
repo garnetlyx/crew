@@ -35,6 +35,14 @@ rotate_log_if_needed() {
 export_agent_env() {
   local name="$1"
   local config_file="$2"
+  
+  # Load .crew/.env if it exists
+  if [[ -f ".crew/.env" ]]; then
+    set -a
+    source ".crew/.env"
+    set +a
+  fi
+
   [[ -z "$config_file" || ! -f "$config_file" ]] && return 0
 
   local env_keys
@@ -46,7 +54,10 @@ export_agent_env() {
     local value
     value=$(config_get ".agents[] | select(.name == \"$name\") | .env.$key" "" "$config_file")
     if [[ -n "$value" && "$value" != "null" ]]; then
-      export "$key=$value"
+      # Expand environment variables in the value (like ${API_KEY})
+      local expanded_value
+      expanded_value=$(eval echo "$value")
+      export "$key=$expanded_value"
     fi
   done <<< "$env_keys"
 }
@@ -120,14 +131,25 @@ start_agent() {
     cd "$working_dir" || exit 1
     local restart_count=0
     local delay="$interval"
+    
+    _handle_term() {
+      if [[ -n "${child_pid:-}" ]] && kill -0 "$child_pid" 2>/dev/null; then
+        kill -TERM "$child_pid" 2>/dev/null || true
+      fi
+    }
+    trap _handle_term TERM INT
+
     while true; do
       rotate_log_if_needed "$log_file"
       echo "[$name] Starting at $(timestamp)" >> "$log_file"
-      # Run command as array (no eval - prevents arbitrary code execution from config)
-      local cmd_array
-      read -ra cmd_array <<< "$command"
-      "${cmd_array[@]}" < "$prompt_file" >> "$log_file" 2>&1
+      # Run command via eval to correctly parse quotes in yaml
+      eval "$command < \"$prompt_file\"" >> "$log_file" 2>&1 &
+      child_pid=$!
+      
+      wait "$child_pid" || true
+      wait "$child_pid" 2>/dev/null || true
       local exit_code=$?
+      child_pid=""
 
       echo "[$name] Exited with code $exit_code at $(timestamp)" >> "$log_file"
 
@@ -170,6 +192,21 @@ start_agent() {
   log_info "[$name] Log: $log_file"
 }
 
+# Internal helper to recursively kill a process tree
+_kill_subtree() {
+  local ppid=$1
+  local sig=${2:-TERM}
+  
+  local children
+  children=$(pgrep -P "$ppid" 2>/dev/null || echo "")
+  
+  for child in $children; do
+    [[ -z "$child" ]] && continue
+    _kill_subtree "$child" "$sig"
+    kill "-$sig" "$child" 2>/dev/null || true
+  done
+}
+
 # Stop an agent gracefully
 stop_agent() {
   local name="$1"
@@ -196,7 +233,9 @@ stop_agent() {
   rm -f "$pid_file"
 
   # Send SIGTERM for graceful shutdown
-  if kill -TERM "$pid" 2>/dev/null; then
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -TERM "$pid" 2>/dev/null || true
+    
     # Wait for graceful exit
     local wait_count=0
     while kill -0 "$pid" 2>/dev/null && [[ $wait_count -lt $GRACEFUL_SHUTDOWN_TIMEOUT ]]; do
@@ -206,6 +245,7 @@ stop_agent() {
 
     # Force kill if still alive
     if kill -0 "$pid" 2>/dev/null; then
+      _kill_subtree "$pid" "9"
       kill -9 "$pid" 2>/dev/null
       log_warn "[$name] Force killed"
     else
