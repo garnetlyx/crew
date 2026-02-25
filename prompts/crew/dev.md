@@ -19,7 +19,7 @@ You are a senior developer focused on implementing features, fixing bugs, and im
 
 2. **Monitor Github Actions**
    - Check for CI/CD failures using `gh run list --limit 5`
-   - If a recent run failed, investigate using `gh run view <run-id> --log-failed`
+   - If a recent run failed, investigate using `gh run view <run-id> --log-failed` (Make sure to SPECIFY the `<run-id>` explicitly to prevent an interactive terminal menu from hanging you)
    - Fix the root cause of the failure immediately
 
 

@@ -22,8 +22,14 @@ cross_review_loop() {
   max_iter=$(config_get ".max_iterations" "5" "$config_file")
   local stale_threshold
   stale_threshold=$(config_get ".termination.stale_threshold" "2" "$config_file")
-  local agent_type
-  agent_type=$(get_agent_type "$config_file")
+  
+  # Get generic agent fallback, then specific agents
+  local base_agent
+  base_agent=$(get_agent_type "$config_file")
+  local writer_agent
+  writer_agent=$(config_get ".writer_agent" "$base_agent" "$config_file")
+  local reviewer_agent
+  reviewer_agent=$(config_get ".reviewer_agent" "$base_agent" "$config_file")
   
   # Get prompt paths
   local writer_prompt
@@ -53,7 +59,8 @@ cross_review_loop() {
   local prev_plan_hash=""
   
   header "Cross-Review Loop"
-  log_info "Agent: $agent_type"
+  log_info "Writer Agent: $writer_agent"
+  log_info "Reviewer Agent: $reviewer_agent"
   log_info "Max iterations: $max_iter"
   log_info "Stale threshold: $stale_threshold"
   echo ""
@@ -80,7 +87,7 @@ cross_review_loop() {
     [[ -f "$design_dir/plan.md" ]] && inject_args+=(--inject "$design_dir/plan.md")
     [[ -f "$design_dir/review.md" ]] && inject_args+=(--inject "$design_dir/review.md")
     
-    if ! agent_runner "$agent_type" "$writer_prompt" "${inject_args[@]}" --cwd "$PWD"; then
+    if ! agent_runner "$writer_agent" "$writer_prompt" "${inject_args[@]}" --cwd "$PWD"; then
       log_error "Plan Writer failed"
       return 1
     fi
@@ -112,7 +119,7 @@ cross_review_loop() {
     # ─────────────────────────────────────────────
     log_info "Running Reviewer..."
     
-    if ! agent_runner "$agent_type" "$reviewer_prompt" \
+    if ! agent_runner "$reviewer_agent" "$reviewer_prompt" \
         --inject "$design_dir/plan.md" \
         --cwd "$PWD"; then
       log_error "Reviewer failed"
@@ -223,7 +230,8 @@ design_init() {
   cat > "$design_dir/design.yaml" << EOF
 # Cross-Review Design Session
 project: $(basename "$PWD")
-agent: $agent_type
+writer_agent: $agent_type
+reviewer_agent: $agent_type
 max_iterations: 5
 
 termination:
@@ -269,13 +277,33 @@ design_status() {
   
   header "Design Session Status"
   
+  # Process status
+  local proc_status
+  if pgrep -f "design review|cross_review_loop" >/dev/null; then
+    proc_status="${GREEN}RUNNING${NC}"
+  else
+    proc_status="${YELLOW}IDLE${NC}"
+  fi
+  echo -e "Process: $proc_status"
+  echo ""
+  
   # Config
   if [[ -f "$design_dir/design.yaml" ]]; then
-    local agent
-    agent=$(config_get ".agent" "claude" "$design_dir/design.yaml")
+    local base_agent
+    base_agent=$(config_get ".agent" "claude" "$design_dir/design.yaml")
+    local writer_agent
+    writer_agent=$(config_get ".writer_agent" "$base_agent" "$design_dir/design.yaml")
+    local reviewer_agent
+    reviewer_agent=$(config_get ".reviewer_agent" "$base_agent" "$design_dir/design.yaml")
     local max_iter
     max_iter=$(config_get ".max_iterations" "5" "$design_dir/design.yaml")
-    echo "Agent: $agent"
+    
+    if [[ "$writer_agent" == "$reviewer_agent" ]]; then
+      echo "Agent: $writer_agent"
+    else
+      echo "Writer Agent: $writer_agent"
+      echo "Reviewer Agent: $reviewer_agent"
+    fi
     echo "Max iterations: $max_iter"
   fi
   

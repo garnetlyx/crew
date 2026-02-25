@@ -2,15 +2,15 @@
 # crew/lib/utils.sh - Common utility functions
 set -euo pipefail
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
-BOLD='\033[1m'
+# Colors (ANSI-C quoting for correct display in heredocs and printf)
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[0;33m'
+BLUE=$'\033[0;34m'
+PURPLE=$'\033[0;35m'
+CYAN=$'\033[0;36m'
+NC=$'\033[0m' # No Color
+BOLD=$'\033[1m'
 
 # Logging functions
 log_info()  { echo -e "${BLUE}ℹ${NC} $1"; }
