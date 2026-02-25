@@ -1,5 +1,11 @@
 #!/bin/bash
 # CLI plugin: opencode
+# Requires: opencode CLI (curl -fsSL https://opencode.ai/install | bash)
+# Note: opencode run works headlessly without TTY. The -- separator
+#       prevents prompt text from being parsed as flags.
+#       Known issue: if the configured model's API fails with retryable
+#       errors, opencode retries with exponential backoff and may appear
+#       hung. Ensure model/API keys are properly configured.
 
 cli_opencode_check() {
   command_exists opencode
