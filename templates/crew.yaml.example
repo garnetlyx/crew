@@ -23,23 +23,26 @@ agents:
       ANTHROPIC_API_KEY: ${1ST_API_KEY}
     # Model fallback chain (tried in order when max_restarts exhausted):
     # All entries go under ONE fallback key — do NOT repeat the key.
+    # Example Strategy: Switch models/providers while keeping type: claude
     fallback:
-      - label: second
+      - label: third_party_1
+        type: claude
         max_restarts: 3
         env:
-          ANTHROPIC_BASE_URL: ${2ND_BASE_URL}
-          ANTHROPIC_MODEL: ${2ND_MODEL}
-          ANTHROPIC_API_KEY: ${2ND_API_KEY}
-      - label: third
+          ANTHROPIC_BASE_URL: https://api.deepseek.com/v1
+          ANTHROPIC_MODEL: deepseek-coder
+          ANTHROPIC_API_KEY: ${DEEPSEEK_API_KEY}
+      - label: third_party_2
+        type: claude
         max_restarts: 3
         env:
-          ANTHROPIC_BASE_URL: ${3RD_BASE_URL}
-          ANTHROPIC_MODEL: ${3RD_MODEL}
-          ANTHROPIC_API_KEY: ${3RD_API_KEY}
+          ANTHROPIC_BASE_URL: https://api.together.xyz/v1
+          ANTHROPIC_MODEL: meta-llama/Llama-3-70b-chat-hf
+          ANTHROPIC_API_KEY: ${TOGETHER_API_KEY}
 
   - name: DEV
     icon: 🔵
-    type: claude                # CLI type: claude, codex, opencode, gemini, aider
+    type: codex                # CLI type: codex
     prompt: prompts/dev.txt
     interval: 10
     timeout: 600
@@ -47,49 +50,35 @@ agents:
     working_dirs:
       - server/src/
       - client/src/
-    env:
-      ANTHROPIC_BASE_URL: ${1ST_BASE_URL}
-      ANTHROPIC_MODEL: ${1ST_MODEL}
-      ANTHROPIC_API_KEY: ${1ST_API_KEY}
-    # Model fallback chain (tried in order when max_restarts exhausted):
+    # Example Strategy: Switch underlying tool CLI entirely
     fallback:
-      - label: second
+      - label: use-gemini
+        type: gemini
         max_restarts: 3
-        env:
-          ANTHROPIC_BASE_URL: ${2ND_BASE_URL}
-          ANTHROPIC_MODEL: ${2ND_MODEL}
-          ANTHROPIC_API_KEY: ${2ND_API_KEY}
-      - label: third
+      - label: use-opencode
+        type: opencode
         max_restarts: 3
-        env:
-          ANTHROPIC_BASE_URL: ${3RD_BASE_URL}
-          ANTHROPIC_MODEL: ${3RD_MODEL}
-          ANTHROPIC_API_KEY: ${3RD_API_KEY}
+
 
   - name: JANITOR
     icon: 🟢
-    type: claude                # CLI type: claude, codex, opencode, gemini, aider
+    type: claude                # CLI type: claude
     prompt: prompts/janitor.txt
     interval: 1800     # 30 minutes
     timeout: 600
+    max_restarts: 5
     working_dirs:
       - docs/
       - "*.md"
-    env:
-      ANTHROPIC_BASE_URL: ${1ST_BASE_URL}
-      ANTHROPIC_MODEL: ${1ST_MODEL}
-      ANTHROPIC_API_KEY: ${1ST_API_KEY}
-    # Model fallback chain (tried in order when max_restarts exhausted):
+      - "*screenshot*"
+    # Example Strategy: Mix tool/model changes and custom shell scripts
     fallback:
-      - label: second
+      - label: opencode-custom
+        type: opencode
         max_restarts: 3
         env:
-          ANTHROPIC_BASE_URL: ${2ND_BASE_URL}
-          ANTHROPIC_MODEL: ${2ND_MODEL}
-          ANTHROPIC_API_KEY: ${2ND_API_KEY}
-      - label: third
+          OPENCODE_MODEL: zen/big-pickle
+      - label: emergency-script
+        command: ./scripts/emergency-cleanup.sh
         max_restarts: 3
-        env:
-          ANTHROPIC_BASE_URL: ${3RD_BASE_URL}
-          ANTHROPIC_MODEL: ${3RD_MODEL}
-          ANTHROPIC_API_KEY: ${3RD_API_KEY}
+

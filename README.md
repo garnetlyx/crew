@@ -243,37 +243,67 @@ Set `ANTHROPIC_API_KEY` in your shell environment instead:
 export ANTHROPIC_API_KEY="sk-..."
 ```
 
-## Model Fallback
+## Fallback Mechanism
 
-When an agent fails repeatedly (reaching `max_restarts`), it can automatically fall back to alternative models or providers. Configure a `fallback` chain per-agent in `.crew/crew.yaml`.
+When an agent fails repeatedly (reaching `max_restarts`), it can automatically fall back to alternative models, tools, or custom scripts. Configure a `fallback` chain per-agent in `.crew/crew.yaml`.
 
 ### Fallback Order
 
-```
-Primary (env)  →  fallback[0]  →  fallback[1]  →  ... → exhausted (stop)
-   opus             sonnet          openrouter
+```mermaid
+flowchart LR
+    A[Primary] -->|Fails max_restarts| B[Fallback 0]
+    B -->|Fails| C[Fallback 1]
+    C -->|Fails| D[Exhausted / Stop]
+    A -.->|Success| A
+    B -.->|Success| B
+    C -.->|Success| C
 ```
 
-### Configuration
+Fallback mechanisms support three advanced usage patterns:
+1. **Model/Provider Override:** Keep the same CLI tool (e.g., `claude`) but change environment variables (like `ANTHROPIC_BASE_URL`) to use a different model or API provider.
+2. **CLI Tool Switch:** Completely change the underlying AI CLI tool (e.g., from `type: codex` to `type: gemini`).
+3. **Custom Command:** Run any custom shell script as a final recovery step (e.g., `command: ./emergency-script.sh`).
+
+### Configuration Examples
+
+Below are examples of different fallback strategies (see `templates/crew.yaml.example` for a complete file):
 
 ```yaml
 agents:
-  - name: DEV
+  - name: QA  # Strategy 1: Switch models/providers
     type: claude
-    prompt: prompts/dev.md
     max_restarts: 5
-    env:
-      ANTHROPIC_MODEL: claude-opus-4-20250514
-
     fallback:
-      - label: sonnet
+      - label: deepseek-coder
+        type: claude
         max_restarts: 3
         env:
-          ANTHROPIC_MODEL: claude-sonnet-4-20250514
+          ANTHROPIC_BASE_URL: https://api.deepseek.com/v1
+          ANTHROPIC_MODEL: deepseek-coder
 
-      - label: codex-fallback
-        type: codex
-        max_restarts: 3
+  - name: DEV  # Strategy 2: Switch CLI tools entirely
+    type: codex
+    max_restarts: 5
+    fallback:
+      - label: use-gemini
+        type: gemini
+        max_restarts: 2
+      - label: use-opencode
+        type: opencode
+        max_restarts: 2
+
+  - name: JANITOR  # Strategy 3: Custom model & shell scripts
+    type: claude
+    max_restarts: 3
+    fallback:
+      - label: opencode-custom
+        type: opencode
+        max_restarts: 2
+        env:
+          OPENCODE_MODEL: custom-model-v1
+      - label: emergency-script
+        command: ./scripts/emergency-cleanup.sh
+        max_restarts: 1
 ```
 
 ### Behavior
