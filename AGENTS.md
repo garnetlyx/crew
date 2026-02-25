@@ -66,7 +66,7 @@ crew/
 Termination conditions:
 - `pass`: Reviewer approves
 - `stale`: No changes for 2 iterations
-- `conflict`: Same issues repeat 3+ times
+- `max_iter`: Maximum iterations reached
 
 ### Crew Mode (Parallel Agents)
 
@@ -118,7 +118,6 @@ Termination conditions:
 | 0 | Review passed |
 | 1 | Max iterations reached |
 | 2 | Plan stale (no changes) |
-| 3 | Conflict (same issues repeating) |
 
 ### crew.sh
 | Code | Meaning |
@@ -161,7 +160,6 @@ Edit `.design/design.yaml`:
 ```yaml
 termination:
   stale_threshold: 2    # Iterations without change
-  conflict_threshold: 3 # Repeated issue count
 ```
 
 ### Debug mode

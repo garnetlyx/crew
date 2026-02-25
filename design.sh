@@ -56,7 +56,6 @@ ${BOLD}EXIT CODES${NC}
   0  Review passed
   1  Max iterations reached
   2  Plan became stale (no changes)
-  3  Conflict detected (same issues repeating)
 
 ${BOLD}FILES${NC}
   .design/

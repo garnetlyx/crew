@@ -10,7 +10,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/agent_runner.sh"
 EXIT_PASS=0
 EXIT_MAX_ITER=1
 EXIT_STALE=2
-EXIT_CONFLICT=3
 
 # Cross-review loop
 # Usage: cross_review_loop [max_iterations]
@@ -23,8 +22,6 @@ cross_review_loop() {
   max_iter=$(config_get ".max_iterations" "5" "$config_file")
   local stale_threshold
   stale_threshold=$(config_get ".termination.stale_threshold" "2" "$config_file")
-  local conflict_threshold
-  conflict_threshold=$(config_get ".termination.conflict_threshold" "3" "$config_file")
   local agent_type
   agent_type=$(get_agent_type "$config_file")
   
@@ -54,13 +51,11 @@ cross_review_loop() {
   local iter=0
   local stale_count=0
   local prev_plan_hash=""
-  local issue_history=""
   
   header "Cross-Review Loop"
   log_info "Agent: $agent_type"
   log_info "Max iterations: $max_iter"
   log_info "Stale threshold: $stale_threshold"
-  log_info "Conflict threshold: $conflict_threshold"
   echo ""
   
   # Cleanup on interrupt
@@ -144,13 +139,6 @@ cross_review_loop() {
       return $EXIT_PASS
     fi
     
-    # Check for conflict (same issues repeating)
-    if detect_conflict "$design_dir/history/" "$conflict_threshold"; then
-      log_error "Conflict detected: same issues repeating $conflict_threshold+ times"
-      log_info "Writer and Reviewer may be in a loop. Manual intervention needed."
-      return $EXIT_CONFLICT
-    fi
-    
     log_warn "Review: needs revision. Continuing..."
     echo ""
   done
@@ -176,36 +164,6 @@ parse_review_decision() {
   else
     echo "fail"
   fi
-}
-
-# Detect conflict (same issues repeating)
-detect_conflict() {
-  local history_dir="$1"
-  local threshold="${2:-3}"
-  
-  # Simple heuristic: check if last N reviews have similar issue titles
-  local review_files
-  review_files=$(ls -t "$history_dir"/review_v*.md 2>/dev/null | head -n "$threshold")
-  
-  if [[ $(echo "$review_files" | wc -l) -lt "$threshold" ]]; then
-    # Not enough history
-    return 1
-  fi
-  
-  # Extract issue titles from each review and check for repeats
-  local all_issues=""
-  for file in $review_files; do
-    # Extract lines matching "### [CATEGORY]: [Title]" pattern
-    local issues
-    issues=$(grep -E '^###\s+\[.*\]:' "$file" 2>/dev/null | sort)
-    all_issues+="$issues"$'\n'
-  done
-  
-  # Check if any issue appears threshold times
-  local repeated
-  repeated=$(echo "$all_issues" | sort | uniq -c | awk -v t="$threshold" '$1 >= t {print}')
-  
-  [[ -n "$repeated" ]]
 }
 
 # Resolve prompt path (local .design/prompts or crew home)
@@ -270,7 +228,6 @@ max_iterations: 5
 
 termination:
   stale_threshold: 2
-  conflict_threshold: 3
 
 prompts:
   plan_writer: prompts/plan_writer.md
