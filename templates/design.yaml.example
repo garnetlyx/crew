@@ -2,8 +2,8 @@
 # Copy to .design/design.yaml in your project
 
 project: my-project
-writer_agent: claude              # claude, codex, opencode, gemini, aider
-reviewer_agent: codex
+writer_agent: gemini              # claude, codex, opencode, gemini, aider
+reviewer_agent: claude
 max_iterations: 5                 # Maximum review cycles
 
 termination:

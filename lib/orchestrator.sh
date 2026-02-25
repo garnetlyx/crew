@@ -68,8 +68,17 @@ cross_review_loop() {
   # Cleanup on interrupt
   trap 'log_info "Design session interrupted."; return 1' INT TERM
 
-  # Ensure history directory exists
-  ensure_dir "$design_dir/history"
+  # Ensure history directory exists if enabled
+  local history_enabled
+  history_enabled=$(config_get ".history.enabled" "true" "$config_file")
+  if [[ "$history_enabled" == "true" ]]; then
+    ensure_dir "$design_dir/history"
+  else
+    # Auto-clean history if it was just turned off
+    if [[ -d "$design_dir/history" ]]; then
+      rm -f "$design_dir/history/"*.md 2>/dev/null || true
+    fi
+  fi
   
   while [ "$iter" -lt "$max_iter" ]; do
     iter=$((iter + 1))
@@ -110,9 +119,11 @@ cross_review_loop() {
       prev_plan_hash="$curr_hash"
     fi
     
-    # Save to history
-    cp "$design_dir/plan.md" "$design_dir/history/plan_v${iter}.md"
-    log_ok "Plan saved to history/plan_v${iter}.md"
+    # Save to history if enabled
+    if [[ "$history_enabled" == "true" ]]; then
+      cp "$design_dir/plan.md" "$design_dir/history/plan_v${iter}.md"
+      log_ok "Plan saved to history/plan_v${iter}.md"
+    fi
     
     # ─────────────────────────────────────────────
     # Stage 2: Reviewer
@@ -126,9 +137,11 @@ cross_review_loop() {
       return 1
     fi
     
-    # Save review to history
-    cp "$design_dir/review.md" "$design_dir/history/review_v${iter}.md"
-    log_ok "Review saved to history/review_v${iter}.md"
+    # Save review to history if enabled
+    if [[ "$history_enabled" == "true" ]]; then
+      cp "$design_dir/review.md" "$design_dir/history/review_v${iter}.md"
+      log_ok "Review saved to history/review_v${iter}.md"
+    fi
     
     # ─────────────────────────────────────────────
     # Check Decision
