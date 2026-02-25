@@ -26,12 +26,19 @@ crew/
 ├── crew.sh              # Parallel agent orchestration entry
 ├── design.sh            # Cross-review loop entry
 ├── install.sh           # Installation script
+├── plugins/             # Built-in CLI plugins
+│   ├── claude.sh
+│   ├── codex.sh
+│   ├── opencode.sh
+│   ├── gemini.sh
+│   └── aider.sh
 ├── lib/
 │   ├── utils.sh         # Logging, colors, helpers
 │   ├── config.sh        # YAML parsing (yq/python fallback)
+│   ├── plugin_loader.sh # CLI plugin discovery and dispatch
 │   ├── orchestrator.sh  # Cross-review loop engine
 │   ├── watchdog.sh      # Agent health monitoring
-│   ├── agent_runner.sh  # Unified CLI abstraction
+│   ├── agent_runner.sh  # Design mode agent interface
 │   └── status.sh        # Status display, monitoring
 ├── prompts/
 │   ├── crew/
@@ -88,7 +95,8 @@ Termination conditions:
 |--------|---------|
 | `orchestrator.sh` | Cross-review loop logic, termination detection |
 | `watchdog.sh` | Start/stop agents, PID management, health checks |
-| `agent_runner.sh` | CLI abstraction for claude/opencode/gemini |
+| `plugin_loader.sh` | Plugin discovery, loading, validation, dispatch |
+| `agent_runner.sh` | Design mode agent interface (delegates to plugins) |
 | `config.sh` | YAML parsing with yq or Python fallback |
 | `utils.sh` | Logging (log_info, log_ok, log_warn, log_error), helpers |
 | `status.sh` | Status table display, real-time monitor |
@@ -105,9 +113,11 @@ Termination conditions:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CREW_AGENT` | `claude` | Override agent type (claude, opencode, gemini) |
+| `CREW_AGENT` | `claude` | Override agent type (any installed plugin name) |
 | `ANTHROPIC_BASE_URL` | (none) | Override API endpoint for Claude CLI |
 | `ANTHROPIC_MODEL` | (none) | Override model for Claude CLI |
+| `OPENAI_API_KEY` | (none) | API key for Codex CLI |
+| `GEMINI_API_KEY` | (none) | API key for Gemini CLI |
 | `DEBUG` | unset | Set to `1` for verbose debug output |
 
 ## Exit Codes
@@ -144,16 +154,17 @@ Termination conditions:
 ├── crew.yaml       # Agent config
 ├── prompts/        # Agent prompts
 ├── logs/           # Agent logs (QA.log, DEV.log, ...)
-└── run/            # PID files (QA.pid, DEV.pid, ...)
+├── run/            # PID files (QA.pid, DEV.pid, ...)
+└── cli.d/          # Custom CLI plugins (optional)
 ```
 
 ## Common Tasks
 
-### Add a new agent type
-1. Edit `lib/agent_runner.sh`
-2. Add `run_<agent_name>()` function
-3. Update `agent_runner()` case statement
-4. Add to `check_agent()` and `list_agents()`
+### Add a new CLI plugin
+1. Create `plugins/<name>.sh` (or `.crew/cli.d/<name>.sh` for project-local)
+2. Define required functions: `cli_<name>_check()`, `cli_<name>_run()`, `cli_<name>_run_prompt()`
+3. Optionally define: `cli_<name>_pre_run()`, `cli_<name>_install_hint()`
+4. Use `type: <name>` in crew.yaml
 
 ### Customize termination conditions
 Edit `.design/design.yaml`:

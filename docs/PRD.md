@@ -1,6 +1,6 @@
 # crew - Product Requirements Document
 
-**Version**: 0.1.0
+**Version**: 0.2.0
 **Status**: Implemented
 **Last Updated**: 2026-02-06
 
@@ -100,7 +100,8 @@ crew solves these by automating agent coordination and enabling AI-to-AI feedbac
 
 - [x] **Design Mode**: Cross-review loop (`design init`, `design review`, `design status`)
 - [x] **Crew Mode**: Parallel agent orchestration (`crew init`, `crew start`, `crew stop`)
-- [x] **Multi-agent support**: claude, opencode, gemini CLI integration
+- [x] **Multi-agent support**: claude, codex, opencode, gemini, aider CLI integration
+- [x] **CLI plugin system**: Extensible type-based CLI registration with plugin discovery
 - [x] **Health monitoring**: Watchdog loop with configurable intervals
 - [x] **Status display**: Real-time dashboard (`crew monitor`)
 - [x] **Log management**: Per-agent logging (`crew logs`)
@@ -122,7 +123,6 @@ crew solves these by automating agent coordination and enabling AI-to-AI feedbac
 - [ ] Result aggregation and conflict resolution
 - [ ] Dry-run mode for validation
 - [ ] Web-based dashboard
-- [ ] Custom agent templates
 
 ### 4.3 Out of Scope
 
@@ -140,7 +140,7 @@ crew solves these by automating agent coordination and enabling AI-to-AI feedbac
 |------------|---------|----------|
 | Bash 4+ | Shell runtime | Yes |
 | yq or Python 3 | YAML parsing | Yes (one of) |
-| claude/opencode/gemini | AI CLI | Yes (one of) |
+| claude/codex/opencode/gemini/aider | AI CLI | Yes (one of) |
 
 ### 5.2 Platform Support
 

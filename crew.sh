@@ -24,10 +24,11 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
 source "$SCRIPT_DIR/lib/utils.sh"
 source "$SCRIPT_DIR/lib/config.sh"
+source "$SCRIPT_DIR/lib/plugin_loader.sh"
 source "$SCRIPT_DIR/lib/watchdog.sh"
 source "$SCRIPT_DIR/lib/status.sh"
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 CREW_DIR=".crew"
 CONFIG_FILE="$CREW_DIR/crew.yaml"
 
@@ -47,6 +48,7 @@ ${BOLD}COMMANDS${NC}
   ps                   Show active agent processes
   monitor              Real-time dashboard
   logs <AGENT>         Tail agent logs
+  plugins              List available CLI plugins
   validate             Check config syntax
   help                 Show this help
 
@@ -116,9 +118,7 @@ check_interval: 30
 agents:
   - name: QA
     icon: "\U0001F534"
-    # command must be a simple command (no pipes/shell operators)
-    # For complex commands, use a wrapper script
-    command: rm -rf .claude/conversations && claude --dangerously-skip-permissions
+    type: claude                 # CLI type: claude, codex, opencode, gemini, aider
     prompt: prompts/qa.md
     interval: 10
     timeout: 600
@@ -133,45 +133,48 @@ agents:
     #     max_restarts: 3
     #     env:
     #       ANTHROPIC_MODEL: claude-sonnet-4-20250514
-    #   - label: openrouter
+    #   - label: codex-fallback
+    #     type: codex            # Switch CLI on fallback
     #     max_restarts: 3
-    #     env:
-    #       ANTHROPIC_BASE_URL: https://openrouter.ai/api/v1
-    #       ANTHROPIC_MODEL: anthropic/claude-sonnet-4-20250514
 
   - name: DEV
     icon: "\U0001F535"
-    command: rm -rf .claude/conversations && claude --dangerously-skip-permissions
+    type: claude
     prompt: prompts/dev.md
     interval: 10
     timeout: 600
 
   - name: JANITOR
     icon: "\U0001F7E2"
-    command: rm -rf .claude/conversations && claude --dangerously-skip-permissions
+    type: claude
     prompt: prompts/janitor.md
     interval: 10
     timeout: 600
 
 # ──────────────────────────────────────────────
+# CLI Types
+# ──────────────────────────────────────────────
+# Built-in types: claude, codex, opencode, gemini, aider
+# Custom plugins: drop .sh files in .crew/cli.d/ or ~/.crew/cli.d/
+# Run 'crew plugins' to see available types.
+#
+# Legacy: use 'command' field instead of 'type' for custom CLIs:
+#   - name: CUSTOM
+#     command: my-cli --auto
+#     prompt: prompts/custom.md
+#
+# ──────────────────────────────────────────────
 # 3rd Party / Self-Hosted Model Configuration
 # ──────────────────────────────────────────────
-# To use a different provider (e.g., OpenRouter, self-hosted):
-#
-#   agents:
-#     - name: DEV
-#       command: rm -rf .claude/conversations && claude --dangerously-skip-permissions
-#       env:
-#         ANTHROPIC_BASE_URL: https://openrouter.ai/api/v1
-#         ANTHROPIC_MODEL: anthropic/claude-sonnet-4-20250514
-#
-# Supported env vars for Claude CLI:
-#   ANTHROPIC_BASE_URL  - API endpoint URL
-#   ANTHROPIC_MODEL     - Model identifier
-#   ANTHROPIC_API_KEY   - API key (prefer shell env over config file!)
+# Use per-agent env vars for different providers:
+#   - name: DEV
+#     type: claude
+#     env:
+#       ANTHROPIC_BASE_URL: https://openrouter.ai/api/v1
+#       ANTHROPIC_MODEL: anthropic/claude-sonnet-4-20250514
 #
 # WARNING: Do NOT put API keys in this file if it's committed to git.
-# Set ANTHROPIC_API_KEY in your shell environment instead.
+# Set API keys in your shell environment instead.
 EOF
   log_ok "Created $CONFIG_FILE"
 
@@ -233,17 +236,25 @@ crew_start() {
     # Start specific agents
     for name in "${agents[@]}"; do
       validate_agent_name "$name" || continue
-      local command prompt_file
-      command=$(config_get ".agents[] | select(.name == \"$name\") | .command" "" "$CONFIG_FILE")
+      local prompt_file interval cli_type
       prompt_file=$(config_get ".agents[] | select(.name == \"$name\") | .prompt" "" "$CONFIG_FILE")
       interval=$(config_get ".agents[] | select(.name == \"$name\") | .interval" "$DEFAULT_RESTART_DELAY" "$CONFIG_FILE")
 
-      if [[ -z "$command" ]]; then
+      if [[ -z "$prompt_file" ]]; then
         log_error "[$name] Not found in config"
         continue
       fi
 
-      start_agent "$name" "$command" "$CREW_DIR/$prompt_file" "$interval" "$PWD" "$CONFIG_FILE" || true
+      # Pre-validate plugin for type-based agents
+      cli_type=$(get_agent_cli_type "$name" "$CONFIG_FILE")
+      if [[ "$cli_type" != "command" ]]; then
+        if ! load_plugin "$cli_type" 2>/dev/null; then
+          log_error "[$name] Unknown CLI type: $cli_type"
+          continue
+        fi
+      fi
+
+      start_agent "$name" "$CREW_DIR/$prompt_file" "$interval" "$PWD" "$CONFIG_FILE" || true
     done
   fi
   
@@ -328,13 +339,18 @@ crew_logs() {
   tail_agent_log "$name"
 }
 
+# List available plugins
+crew_plugins() {
+  list_plugins
+}
+
 # Validate config
 crew_validate() {
   if [[ ! -f "$CONFIG_FILE" ]]; then
     log_error "No config found."
     return 1
   fi
-  
+
   validate_config "$CONFIG_FILE"
 }
 
@@ -367,6 +383,9 @@ main() {
       ;;
     logs)
       crew_logs "$@"
+      ;;
+    plugins)
+      crew_plugins
       ;;
     validate)
       crew_validate

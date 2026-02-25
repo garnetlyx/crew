@@ -116,21 +116,130 @@ get_agent_type() {
   echo "claude"
 }
 
+# Get the effective CLI type for a crew agent
+# Resolution: command > type > default "claude"
+# Returns "command" sentinel if raw command override is present
+# Usage: get_agent_cli_type <name> <config_file>
+get_agent_cli_type() {
+  local name="$1"
+  local config_file="$2"
+
+  # Check for explicit command first (backward compat)
+  local command
+  command=$(config_get ".agents[] | select(.name == \"$name\") | .command" "" "$config_file")
+  if [[ -n "$command" && "$command" != "null" ]]; then
+    echo "command"
+    return
+  fi
+
+  # Check for type field
+  local agent_type
+  agent_type=$(config_get ".agents[] | select(.name == \"$name\") | .type" "" "$config_file")
+  if [[ -n "$agent_type" && "$agent_type" != "null" ]]; then
+    echo "$agent_type"
+    return
+  fi
+
+  # Default
+  echo "claude"
+}
+
+# Get the effective CLI type for a fallback level
+# Level 0 = agent level, Level N = fallback[N-1]
+# Resolution: fallback.command > fallback.type > inherit agent type
+# Usage: get_fallback_cli_type <name> <level> <config_file>
+get_fallback_cli_type() {
+  local name="$1"
+  local level="$2"
+  local config_file="$3"
+
+  if [[ "$level" -eq 0 ]]; then
+    get_agent_cli_type "$name" "$config_file"
+    return
+  fi
+
+  local fb_idx=$((level - 1))
+
+  # Check fallback command override
+  local fb_command
+  fb_command=$(config_get ".agents[] | select(.name == \"$name\") | .fallback[$fb_idx].command" "" "$config_file")
+  if [[ -n "$fb_command" && "$fb_command" != "null" ]]; then
+    echo "command"
+    return
+  fi
+
+  # Check fallback type override
+  local fb_type
+  fb_type=$(config_get ".agents[] | select(.name == \"$name\") | .fallback[$fb_idx].type" "" "$config_file")
+  if [[ -n "$fb_type" && "$fb_type" != "null" ]]; then
+    echo "$fb_type"
+    return
+  fi
+
+  # Inherit from agent level
+  get_agent_cli_type "$name" "$config_file"
+}
+
+# Get the raw command for a fallback level (when cli_type == "command")
+# Usage: get_fallback_command <name> <level> <config_file>
+get_fallback_command() {
+  local name="$1"
+  local level="$2"
+  local config_file="$3"
+
+  if [[ "$level" -eq 0 ]]; then
+    config_get ".agents[] | select(.name == \"$name\") | .command" "" "$config_file"
+    return
+  fi
+
+  local fb_idx=$((level - 1))
+  local fb_command
+  fb_command=$(config_get ".agents[] | select(.name == \"$name\") | .fallback[$fb_idx].command" "" "$config_file")
+  if [[ -n "$fb_command" && "$fb_command" != "null" ]]; then
+    echo "$fb_command"
+    return
+  fi
+
+  # Inherit from agent level
+  config_get ".agents[] | select(.name == \"$name\") | .command" "" "$config_file"
+}
+
 # Validate config file
 validate_config() {
   local config_file="$1"
-  
+
   if ! [[ -f "$config_file" ]]; then
     log_error "Config file not found: $config_file"
     return 1
   fi
-  
+
   # Check if parseable
   if ! parse_yaml "." "$config_file" > /dev/null 2>&1; then
     log_error "Invalid YAML syntax in: $config_file"
     return 1
   fi
-  
+
+  # Validate agent types resolve to loadable plugins
+  local agents
+  agents=$(config_get ".agents[].name" "" "$config_file" 2>/dev/null)
+  if [[ -n "$agents" ]]; then
+    local has_error=false
+    while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
+      local cli_type
+      cli_type=$(get_agent_cli_type "$name" "$config_file")
+      if [[ "$cli_type" != "command" ]]; then
+        if ! load_plugin "$cli_type" 2>/dev/null; then
+          log_error "[$name] Unknown CLI type: $cli_type"
+          has_error=true
+        fi
+      fi
+    done <<< "$agents"
+    if $has_error; then
+      return 1
+    fi
+  fi
+
   log_ok "Config valid: $config_file"
   return 0
 }

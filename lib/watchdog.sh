@@ -4,6 +4,7 @@ set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/plugin_loader.sh"
 
 # Default values
 DEFAULT_CHECK_INTERVAL=30
@@ -177,13 +178,13 @@ release_pid_lock() {
 }
 
 # Start an agent in background with monitoring
+# Usage: start_agent <name> <prompt_file> <interval> <working_dir> <config_file>
 start_agent() {
   local name="$1"
-  local command="$2"
-  local prompt_file="$3"
-  local interval="${4:-$DEFAULT_RESTART_DELAY}"
-  local working_dir="${5:-$PWD}"
-  local config_file="${6:-}"
+  local prompt_file="$2"
+  local interval="${3:-$DEFAULT_RESTART_DELAY}"
+  local working_dir="${4:-$PWD}"
+  local config_file="${5:-}"
   local crew_dir=".crew"
 
   validate_agent_name "$name" || return 1
@@ -244,6 +245,12 @@ start_agent() {
       # Export env for this fallback level
       export_fallback_env "$name" "$current_level" "$config_file"
 
+      # Resolve CLI type for this fallback level
+      local cli_type="claude"
+      if [[ -n "$config_file" && -f "$config_file" ]]; then
+        cli_type=$(get_fallback_cli_type "$name" "$current_level" "$config_file")
+      fi
+
       # Get per-level max_restarts
       local level_max_restarts="$DEFAULT_MAX_RESTARTS"
       if [[ -n "$config_file" && -f "$config_file" ]]; then
@@ -257,7 +264,7 @@ start_agent() {
       echo "${current_level}|${level_label}" > "$fallback_state_file"
 
       if [[ "$current_level" -gt 0 ]]; then
-        echo "[$name] Falling back to: $level_label (level $current_level)" >> "$log_file"
+        echo "[$name] Falling back to: $level_label (level $current_level, type: $cli_type)" >> "$log_file"
       fi
 
       local restart_count=0
@@ -266,9 +273,18 @@ start_agent() {
       # Inner loop: retry at current level
       while true; do
         rotate_log_if_needed "$log_file"
-        echo "[$name] Starting at $(timestamp) [$level_label]" >> "$log_file"
-        # Run command via eval to correctly parse quotes in yaml
-        eval "$command < \"$prompt_file\"" >> "$log_file" 2>&1 &
+        echo "[$name] Starting at $(timestamp) [$level_label] (type: $cli_type)" >> "$log_file"
+
+        # Execute based on type
+        if [[ "$cli_type" == "command" ]]; then
+          # Legacy: raw command from config
+          local raw_command
+          raw_command=$(get_fallback_command "$name" "$current_level" "$config_file")
+          eval "$raw_command < \"$prompt_file\"" >> "$log_file" 2>&1 &
+        else
+          # Plugin-based execution
+          plugin_run "$cli_type" "$prompt_file" "$working_dir" >> "$log_file" 2>&1 &
+        fi
         child_pid=$!
 
         local exit_code=0
@@ -451,18 +467,17 @@ get_agent_pid() {
 restart_agent() {
   local name="$1"
   local config_file="$2"
-  
+
   stop_agent "$name"
   sleep 1
-  
+
   # Get agent config and restart
-  local command prompt_file interval
-  command=$(config_get ".agents[] | select(.name == \"$name\") | .command" "" "$config_file")
+  local prompt_file interval
   prompt_file=$(config_get ".agents[] | select(.name == \"$name\") | .prompt" "" "$config_file")
   interval=$(config_get ".agents[] | select(.name == \"$name\") | .interval" "$DEFAULT_RESTART_DELAY" "$config_file")
-  
-  if [[ -n "$command" && -n "$prompt_file" ]]; then
-    start_agent "$name" "$command" ".crew/$prompt_file" "$interval" "$PWD" "$config_file" || true
+
+  if [[ -n "$prompt_file" ]]; then
+    start_agent "$name" ".crew/$prompt_file" "$interval" "$PWD" "$config_file" || true
   else
     log_error "[$name] Cannot restart: missing config"
   fi
@@ -471,29 +486,39 @@ restart_agent() {
 # Start all agents from config
 start_all_agents() {
   local config_file="$1"
-  
+
   if [[ ! -f "$config_file" ]]; then
     log_error "Config file not found: $config_file"
     return 1
   fi
-  
+
   # Get list of agent names
   local agents
   agents=$(config_get ".agents[].name" "" "$config_file")
-  
+
   while IFS= read -r name; do
     [[ -z "$name" ]] && continue
     validate_agent_name "$name" || continue
-    local command prompt_file interval
-    command=$(config_get ".agents[] | select(.name == \"$name\") | .command" "" "$config_file")
+    local prompt_file interval
     prompt_file=$(config_get ".agents[] | select(.name == \"$name\") | .prompt" "" "$config_file")
     interval=$(config_get ".agents[] | select(.name == \"$name\") | .interval" "$DEFAULT_RESTART_DELAY" "$config_file")
-    
-    if [[ -n "$command" && -n "$prompt_file" ]]; then
-      start_agent "$name" "$command" ".crew/$prompt_file" "$interval" "$PWD" "$config_file" || true
-    else
-      log_warn "[$name] Skipping: missing command or prompt"
+
+    if [[ -z "$prompt_file" ]]; then
+      log_warn "[$name] Skipping: missing prompt"
+      continue
     fi
+
+    # Pre-validate plugin for type-based agents
+    local cli_type
+    cli_type=$(get_agent_cli_type "$name" "$config_file")
+    if [[ "$cli_type" != "command" ]]; then
+      if ! load_plugin "$cli_type" 2>/dev/null; then
+        log_warn "[$name] Skipping: unknown CLI type '$cli_type'"
+        continue
+      fi
+    fi
+
+    start_agent "$name" ".crew/$prompt_file" "$interval" "$PWD" "$config_file" || true
   done <<< "$agents"
 }
 
@@ -553,10 +578,10 @@ watchdog_loop() {
             log_warn "[$name] All fallback levels exhausted, not restarting"
           else
             log_warn "[$name] Not running, starting..."
-            local command prompt_file
-            command=$(config_get ".agents[] | select(.name == \"$name\") | .command" "" "$config_file")
+            local prompt_file interval
             prompt_file=$(config_get ".agents[] | select(.name == \"$name\") | .prompt" "" "$config_file")
-            start_agent "$name" "$command" "$prompt_file"
+            interval=$(config_get ".agents[] | select(.name == \"$name\") | .interval" "$DEFAULT_RESTART_DELAY" "$config_file")
+            start_agent "$name" ".crew/$prompt_file" "$interval" "$PWD" "$config_file"
           fi
           ;;
       esac

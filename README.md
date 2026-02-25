@@ -33,7 +33,7 @@ export PATH="$HOME/.local/bin:$PATH"
 Requires:
 - Bash 4+
 - `yq` for YAML parsing: `brew install yq`
-- An AI CLI: `claude`, `opencode`, or `gemini`
+- An AI CLI: `claude`, `codex`, `opencode`, `gemini`, or `aider`
 
 Supported platforms:
 - **macOS** (primary, actively developed)
@@ -134,19 +134,19 @@ check_interval: 30
 agents:
   - name: QA
     icon: 🔴
-    command: claude --dangerously-skip-permissions
+    type: claude
     prompt: prompts/qa.txt
     interval: 10
     timeout: 600
 
   - name: DEV
     icon: 🔵
-    command: claude --dangerously-skip-permissions
+    type: claude
     prompt: prompts/dev.txt
 
   - name: JANITOR
     icon: 🟢
-    command: claude --dangerously-skip-permissions
+    type: claude
     prompt: prompts/janitor.txt
     interval: 10
     timeout: 600
@@ -164,6 +164,53 @@ agents:
 └── run/            # PID files
 ```
 
+## CLI Plugins
+
+crew uses a plugin system for CLI abstraction. Each supported CLI has a plugin that handles prompt delivery and execution.
+
+### Built-in Plugins
+
+| Plugin | CLI | Install |
+|--------|-----|---------|
+| `claude` | Claude Code | `npm install -g @anthropic-ai/claude-code` |
+| `codex` | OpenAI Codex | `npm install -g @openai/codex` |
+| `opencode` | OpenCode | `go install github.com/opencode-ai/opencode@latest` |
+| `gemini` | Google Gemini | `pip install google-gemini-cli` |
+| `aider` | Aider | `pip install aider-chat` |
+
+List installed plugins:
+
+```bash
+crew plugins
+```
+
+### Custom Plugins
+
+Create a `.sh` file in `.crew/cli.d/` (project-local) or `~/.crew/cli.d/` (global):
+
+```bash
+#!/bin/bash
+# .crew/cli.d/myagent.sh
+
+cli_myagent_check() {
+  command_exists myagent
+}
+
+cli_myagent_run() {
+  local prompt_file="$1"
+  local working_dir="$2"
+  (cd "$working_dir" && myagent --auto < "$prompt_file")
+}
+
+cli_myagent_run_prompt() {
+  local prompt="$1"
+  local working_dir="$2"
+  (cd "$working_dir" && echo "$prompt" | myagent --auto)
+}
+```
+
+Then use `type: myagent` in `crew.yaml`.
+
 ## 3rd Party / Self-Hosted Models
 
 Use the `env` field in `.crew/crew.yaml` to configure per-agent environment variables for different providers:
@@ -171,7 +218,7 @@ Use the `env` field in `.crew/crew.yaml` to configure per-agent environment vari
 ```yaml
 agents:
   - name: DEV
-    command: claude --dangerously-skip-permissions
+    type: claude
     prompt: prompts/dev.md
     env:
       ANTHROPIC_BASE_URL: https://openrouter.ai/api/v1
@@ -212,7 +259,7 @@ Primary (env)  →  fallback[0]  →  fallback[1]  →  ... → exhausted (stop)
 ```yaml
 agents:
   - name: DEV
-    command: rm -rf .claude/conversations && claude --dangerously-skip-permissions
+    type: claude
     prompt: prompts/dev.md
     max_restarts: 5
     env:
@@ -224,11 +271,9 @@ agents:
         env:
           ANTHROPIC_MODEL: claude-sonnet-4-20250514
 
-      - label: openrouter-sonnet
+      - label: codex-fallback
+        type: codex
         max_restarts: 3
-        env:
-          ANTHROPIC_BASE_URL: https://openrouter.ai/api/v1
-          ANTHROPIC_MODEL: anthropic/claude-sonnet-4-20250514
 ```
 
 ### Behavior
@@ -243,10 +288,12 @@ agents:
 
 | Variable | Description |
 |----------|-------------|
-| `CREW_AGENT` | Override default agent type (claude, opencode, gemini) |
+| `CREW_AGENT` | Override default agent type (any installed plugin) |
 | `ANTHROPIC_BASE_URL` | Override API endpoint for Claude CLI |
 | `ANTHROPIC_MODEL` | Override model for Claude CLI |
 | `ANTHROPIC_API_KEY` | API key for Claude CLI (set in shell, not config) |
+| `OPENAI_API_KEY` | API key for Codex CLI (set in shell, not config) |
+| `GEMINI_API_KEY` | API key for Gemini CLI (set in shell, not config) |
 | `DEBUG` | Set to `1` for verbose output |
 
 ## Examples
@@ -310,6 +357,22 @@ command: claude --dangerously-skip-permissions
 env:
   ANTHROPIC_MODEL: my-model
 ```
+
+### Migration to `type` field (v0.2.0)
+
+The `command` field is now optional. Use the `type` field instead:
+
+Before:
+```yaml
+command: claude --dangerously-skip-permissions
+```
+
+After:
+```yaml
+type: claude
+```
+
+The `command` field still works for backward compatibility and custom CLIs.
 
 ### 4. Verify
 

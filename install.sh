@@ -12,6 +12,7 @@ echo "Installing crew tools..."
 chmod +x "$SCRIPT_DIR/crew.sh"
 chmod +x "$SCRIPT_DIR/design.sh"
 chmod +x "$SCRIPT_DIR/lib/"*.sh
+chmod +x "$SCRIPT_DIR/plugins/"*.sh
 
 # Ensure ~/.local/bin exists
 mkdir -p "$INSTALL_DIR"

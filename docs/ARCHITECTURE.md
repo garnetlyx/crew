@@ -1,6 +1,6 @@
 # crew - Architecture Document
 
-**Version**: 0.1.0
+**Version**: 0.2.0
 **Last Updated**: 2026-02-06
 
 ---
@@ -75,9 +75,15 @@ lib/
 │              restart_agent, watchdog_loop                        │
 │   Used by: crew.sh, status.sh                                    │
 ├──────────────────────────────────────────────────────────────────┤
+├── plugin_loader.sh ─────────────────────────────────────────────┐
+│   CLI plugin discovery, loading, validation, dispatch            │
+│   Functions: load_plugin, plugin_run, plugin_run_prompt,         │
+│              plugin_check, list_plugins                          │
+│   Used by: agent_runner.sh, watchdog.sh, crew.sh                 │
+├──────────────────────────────────────────────────────────────────┤
 ├── agent_runner.sh   ─────────────────────────────────────────────┐
-│   CLI abstraction: unified interface for multiple AI CLIs        │
-│   Functions: agent_runner, run_claude, run_opencode, run_gemini  │
+│   CLI abstraction: design mode interface (delegates to plugins)  │
+│   Functions: agent_runner, build_prompt, check_agent, list_agents│
 │   Used by: orchestrator.sh                                       │
 ├──────────────────────────────────────────────────────────────────┤
 └── status.sh         ─────────────────────────────────────────────┐
@@ -244,6 +250,12 @@ lib/
 │   ├── watchdog.sh
 │   ├── agent_runner.sh
 │   └── status.sh
+├── plugins/
+│   ├── claude.sh              # Claude CLI plugin
+│   ├── codex.sh               # OpenAI Codex plugin
+│   ├── opencode.sh            # OpenCode plugin
+│   ├── gemini.sh              # Gemini plugin
+│   └── aider.sh               # Aider plugin
 ├── prompts/
 │   ├── crew/
 │   │   ├── qa.md              # QA agent prompt
@@ -285,6 +297,7 @@ lib/
 <project>/
 └── .crew/
     ├── crew.yaml              # Agent configuration
+    ├── cli.d/                     # Custom CLI plugins (optional)
     ├── prompts/
     │   ├── qa.txt
     │   ├── dev.txt
@@ -367,33 +380,41 @@ stop_agent(name):
 
 ## 6. Extension Points
 
-### 6.1 Adding a New Agent CLI
+### 6.1 Adding a New CLI Plugin
+
+Create a plugin file in `plugins/` (built-in) or `.crew/cli.d/` (project-local):
 
 ```bash
-# In lib/agent_runner.sh:
+#!/bin/bash
+# plugins/myagent.sh
 
-# 1. Add run function
-run_newagent() {
-  local prompt="$1"
-  local working_dir="$2"
-
-  cd "$working_dir" || return 1
-  echo "$prompt" | newagent --prompt -
+cli_myagent_check() {
+  command_exists myagent
 }
 
-# 2. Update agent_runner() case statement
-case "$agent_type" in
-  # ... existing cases ...
-  newagent)
-    run_newagent "$full_prompt" "$working_dir"
-    ;;
-esac
+cli_myagent_run() {
+  local prompt_file="$1"
+  local working_dir="$2"
+  (cd "$working_dir" && myagent --auto < "$prompt_file")
+}
 
-# 3. Update check_agent()
-newagent)
-  command_exists newagent
-  ;;
+cli_myagent_run_prompt() {
+  local prompt="$1"
+  local working_dir="$2"
+  (cd "$working_dir" && echo "$prompt" | myagent --auto)
+}
+
+cli_myagent_install_hint() {
+  echo "Install myagent: npm install -g myagent"
+}
 ```
+
+Plugin discovery order (first match wins):
+1. `.crew/cli.d/` or `.design/cli.d/` (project-local)
+2. `~/.crew/cli.d/` (user-global)
+3. `$CREW_HOME/plugins/` (built-in)
+
+Use `type: myagent` in crew.yaml or `--agent myagent` in design mode.
 
 ### 6.2 Custom Prompts
 
@@ -409,7 +430,7 @@ Environment variables take precedence:
 
 ## 7. Security Considerations
 
-- **No eval**: Commands from YAML config use `read -ra` array execution instead of `eval`
+- **Legacy command mode**: Raw `command` field uses `eval` for backward compatibility; prefer `type` field which uses plugin functions directly
 - **Input validation**: `validate_agent_name()`, `validate_file_path()`, `validate_interval()` in lib/utils.sh
 - **PID file locking**: flock-based locking with graceful fallback for systems without flock
 - **Strict mode**: All lib/*.sh files use `set -euo pipefail`

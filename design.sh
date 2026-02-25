@@ -21,7 +21,7 @@ source "$SCRIPT_DIR/lib/utils.sh"
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/orchestrator.sh"
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 
 usage() {
   cat << EOF
@@ -39,7 +39,7 @@ ${BOLD}COMMANDS${NC}
 
 ${BOLD}OPTIONS${NC}
   --max-iter N     Maximum iterations (default: 5)
-  --agent TYPE     Agent type: claude, opencode, gemini
+  --agent TYPE     Agent type: claude, codex, opencode, gemini, aider
                    (or set CREW_AGENT environment variable)
 
 ${BOLD}EXAMPLES${NC}

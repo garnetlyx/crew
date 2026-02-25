@@ -8,17 +8,38 @@ check_interval: 30  # Health check interval (seconds)
 agents:
   - name: QA
     icon: 🔴
-    command: claude --dangerously-skip-permissions -p
+    type: claude                # CLI type: claude, codex, opencode, gemini, aider
     prompt: prompts/qa.txt
     interval: 10       # Seconds between runs
     timeout: 600       # Kill if no output for this long (10 minutes)
+    max_restarts: 5
     working_dirs:      # Advisory: only modify files in these dirs
+      - docs/
       - e2e/
       - server/src/__tests__/
+    env:
+      ANTHROPIC_BASE_URL: ${1ST_BASE_URL}
+      ANTHROPIC_MODEL: ${1ST_MODEL}
+      ANTHROPIC_API_KEY: ${1ST_API_KEY}
+    # Model fallback chain (tried in order when max_restarts exhausted):
+    # All entries go under ONE fallback key — do NOT repeat the key.
+    fallback:
+      - label: second
+        max_restarts: 3
+        env:
+          ANTHROPIC_BASE_URL: ${2ND_BASE_URL}
+          ANTHROPIC_MODEL: ${2ND_MODEL}
+          ANTHROPIC_API_KEY: ${2ND_API_KEY}
+      - label: third
+        max_restarts: 3
+        env:
+          ANTHROPIC_BASE_URL: ${3RD_BASE_URL}
+          ANTHROPIC_MODEL: ${3RD_MODEL}
+          ANTHROPIC_API_KEY: ${3RD_API_KEY}
 
   - name: DEV
     icon: 🔵
-    command: claude --dangerously-skip-permissions -p
+    type: claude                # CLI type: claude, codex, opencode, gemini, aider
     prompt: prompts/dev.txt
     interval: 10
     timeout: 600
@@ -26,27 +47,49 @@ agents:
     working_dirs:
       - server/src/
       - client/src/
-    # env:
-    #   ANTHROPIC_MODEL: claude-opus-4-20250514
-    #
+    env:
+      ANTHROPIC_BASE_URL: ${1ST_BASE_URL}
+      ANTHROPIC_MODEL: ${1ST_MODEL}
+      ANTHROPIC_API_KEY: ${1ST_API_KEY}
     # Model fallback chain (tried in order when max_restarts exhausted):
-    # fallback:
-    #   - label: sonnet
-    #     max_restarts: 3
-    #     env:
-    #       ANTHROPIC_MODEL: claude-sonnet-4-20250514
-    #   - label: openrouter
-    #     max_restarts: 3
-    #     env:
-    #       ANTHROPIC_BASE_URL: https://openrouter.ai/api/v1
-    #       ANTHROPIC_MODEL: anthropic/claude-sonnet-4-20250514
+    fallback:
+      - label: second
+        max_restarts: 3
+        env:
+          ANTHROPIC_BASE_URL: ${2ND_BASE_URL}
+          ANTHROPIC_MODEL: ${2ND_MODEL}
+          ANTHROPIC_API_KEY: ${2ND_API_KEY}
+      - label: third
+        max_restarts: 3
+        env:
+          ANTHROPIC_BASE_URL: ${3RD_BASE_URL}
+          ANTHROPIC_MODEL: ${3RD_MODEL}
+          ANTHROPIC_API_KEY: ${3RD_API_KEY}
 
   - name: JANITOR
     icon: 🟢
-    command: claude --dangerously-skip-permissions -p
+    type: claude                # CLI type: claude, codex, opencode, gemini, aider
     prompt: prompts/janitor.txt
-    interval: 1800 # 30 minutes
-    timeout: 600 
+    interval: 1800     # 30 minutes
+    timeout: 600
     working_dirs:
       - docs/
       - "*.md"
+    env:
+      ANTHROPIC_BASE_URL: ${1ST_BASE_URL}
+      ANTHROPIC_MODEL: ${1ST_MODEL}
+      ANTHROPIC_API_KEY: ${1ST_API_KEY}
+    # Model fallback chain (tried in order when max_restarts exhausted):
+    fallback:
+      - label: second
+        max_restarts: 3
+        env:
+          ANTHROPIC_BASE_URL: ${2ND_BASE_URL}
+          ANTHROPIC_MODEL: ${2ND_MODEL}
+          ANTHROPIC_API_KEY: ${2ND_API_KEY}
+      - label: third
+        max_restarts: 3
+        env:
+          ANTHROPIC_BASE_URL: ${3RD_BASE_URL}
+          ANTHROPIC_MODEL: ${3RD_MODEL}
+          ANTHROPIC_API_KEY: ${3RD_API_KEY}
