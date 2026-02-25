@@ -40,19 +40,27 @@ show_status() {
   fi
   
   # Print table header
-  printf "%-15s %-10s %-10s %-30s\n" "AGENT" "STATUS" "PID" "LAST LOG"
+  printf "%-15s %-10s %-10s %-15s %-25s\n" "AGENT" "STATUS" "PID" "LEVEL" "LAST LOG"
   separator "-" "$STATUS_TABLE_WIDTH"
-  
+
   for name in $agents; do
-    local status pid_display last_log icon color
+    local status pid_display last_log icon color status_text level_display
     status=$(get_agent_status "$name")
-    
+    level_display="-"
+
     case "$status" in
       running:*)
         pid_display="${status#running:}"
         icon=$(config_get ".agents[] | select(.name == \"$name\") | .icon" "🔵" "$config_file")
         color="$GREEN"
         status_text="running"
+        # Read fallback state
+        local fallback_state_file="$crew_dir/run/${name}.fallback"
+        if [[ -f "$fallback_state_file" ]]; then
+          local fb_state
+          fb_state=$(cat "$fallback_state_file")
+          level_display="${fb_state#*|}"
+        fi
         ;;
       stale)
         pid_display="-"
@@ -65,9 +73,12 @@ show_status() {
         icon="⭕"
         color="$RED"
         status_text="stopped"
+        if [[ -f "$crew_dir/run/${name}.exhausted" ]]; then
+          status_text="exhausted"
+        fi
         ;;
     esac
-    
+
     # Get last log line
     local log_file="$crew_dir/logs/${name}.log"
     if [[ -f "$log_file" ]]; then
@@ -75,8 +86,8 @@ show_status() {
     else
       last_log="-"
     fi
-    
-    printf "${color}%-15s %-10s %-10s %-30s${NC}\n" "$icon $name" "$status_text" "$pid_display" "$last_log"
+
+    printf "${color}%-15s %-10s %-10s %-15s %-25s${NC}\n" "$icon $name" "$status_text" "$pid_display" "$level_display" "$last_log"
   done
   
   echo ""
@@ -141,8 +152,28 @@ show_agent_info() {
   echo "Prompt: $prompt_file"
   echo "Interval: ${interval}s"
   echo "Timeout: ${timeout}s"
+
+  # Fallback chain info
+  local fb_count
+  fb_count=$(get_fallback_count "$name" "$config_file")
+  if [[ "$fb_count" -gt 0 ]]; then
+    echo "Fallback chain: $fb_count level(s)"
+    for ((i=1; i<=fb_count; i++)); do
+      local fb_label
+      fb_label=$(get_fallback_label "$name" "$i" "$config_file")
+      echo "  $i. $fb_label"
+    done
+  fi
+
+  # Current active fallback level
+  local fallback_state_file="$crew_dir/run/${name}.fallback"
+  if [[ -f "$fallback_state_file" ]]; then
+    local fb_state
+    fb_state=$(cat "$fallback_state_file")
+    echo "Active level: ${fb_state#*|}"
+  fi
   echo ""
-  
+
   # Status
   local status
   status=$(get_agent_status "$name")

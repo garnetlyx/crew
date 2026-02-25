@@ -22,9 +22,24 @@ agents:
     prompt: prompts/dev.txt
     interval: 10
     timeout: 600
+    max_restarts: 5
     working_dirs:
       - server/src/
       - client/src/
+    # env:
+    #   ANTHROPIC_MODEL: claude-opus-4-20250514
+    #
+    # Model fallback chain (tried in order when max_restarts exhausted):
+    # fallback:
+    #   - label: sonnet
+    #     max_restarts: 3
+    #     env:
+    #       ANTHROPIC_MODEL: claude-sonnet-4-20250514
+    #   - label: openrouter
+    #     max_restarts: 3
+    #     env:
+    #       ANTHROPIC_BASE_URL: https://openrouter.ai/api/v1
+    #       ANTHROPIC_MODEL: anthropic/claude-sonnet-4-20250514
 
   - name: JANITOR
     icon: 🟢

@@ -122,10 +122,22 @@ agents:
     prompt: prompts/qa.md
     interval: 10
     timeout: 600
+    # max_restarts: 5           # Retries before fallback (default: 5)
     # Per-agent environment variables
     # env:
-    #   ANTHROPIC_BASE_URL: https://api.anthropic.com
     #   ANTHROPIC_MODEL: claude-sonnet-4-20250514
+    #
+    # Model fallback chain (tried in order when max_restarts exhausted):
+    # fallback:
+    #   - label: sonnet
+    #     max_restarts: 3
+    #     env:
+    #       ANTHROPIC_MODEL: claude-sonnet-4-20250514
+    #   - label: openrouter
+    #     max_restarts: 3
+    #     env:
+    #       ANTHROPIC_BASE_URL: https://openrouter.ai/api/v1
+    #       ANTHROPIC_MODEL: anthropic/claude-sonnet-4-20250514
 
   - name: DEV
     icon: "\U0001F535"
@@ -210,6 +222,9 @@ crew_start() {
   log_warn "Review .crew/crew.yaml and prompts before proceeding."
 
   header "Starting Agents"
+
+  # Clean exhausted markers so fallback chain resets on explicit start
+  rm -f "$CREW_DIR/run"/*.exhausted 2>/dev/null || true
 
   if [[ ${#agents[@]} -eq 0 ]]; then
     # Start all

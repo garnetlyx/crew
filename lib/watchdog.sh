@@ -62,6 +62,99 @@ export_agent_env() {
   done <<< "$env_keys"
 }
 
+# Get the number of fallback entries for an agent
+# Usage: get_fallback_count <name> <config_file>
+get_fallback_count() {
+  local name="$1"
+  local config_file="$2"
+
+  [[ -z "$config_file" || ! -f "$config_file" ]] && echo 0 && return 0
+
+  local count
+  count=$(config_get ".agents[] | select(.name == \"$name\") | .fallback | length" "0" "$config_file")
+  [[ -z "$count" || "$count" == "null" ]] && count=0
+  echo "$count"
+}
+
+# Get human-readable label for a fallback level
+# Level 0 = "primary", level N = fallback[N-1].label or "fallback-N"
+# Usage: get_fallback_label <name> <level> <config_file>
+get_fallback_label() {
+  local name="$1"
+  local level="$2"
+  local config_file="$3"
+
+  if [[ "$level" -eq 0 ]]; then
+    echo "primary"
+    return 0
+  fi
+
+  local fb_idx=$((level - 1))
+  local label
+  label=$(config_get ".agents[] | select(.name == \"$name\") | .fallback[$fb_idx].label" "" "$config_file")
+
+  if [[ -z "$label" || "$label" == "null" ]]; then
+    echo "fallback-$level"
+  else
+    echo "$label"
+  fi
+}
+
+# Get max_restarts for a fallback level
+# Level 0 reads from agent.max_restarts, level N from fallback[N-1].max_restarts
+# Usage: get_fallback_max_restarts <name> <level> <config_file>
+get_fallback_max_restarts() {
+  local name="$1"
+  local level="$2"
+  local config_file="$3"
+
+  if [[ "$level" -eq 0 ]]; then
+    local val
+    val=$(config_get ".agents[] | select(.name == \"$name\") | .max_restarts" "" "$config_file")
+    [[ -z "$val" || "$val" == "null" ]] && val="$DEFAULT_MAX_RESTARTS"
+    echo "$val"
+    return 0
+  fi
+
+  local fb_idx=$((level - 1))
+  local val
+  val=$(config_get ".agents[] | select(.name == \"$name\") | .fallback[$fb_idx].max_restarts" "" "$config_file")
+  [[ -z "$val" || "$val" == "null" ]] && val="$DEFAULT_MAX_RESTARTS"
+  echo "$val"
+}
+
+# Export env vars for a specific fallback level
+# Level 0 = primary env only, level N = primary env + fallback[N-1].env overlay
+# Usage: export_fallback_env <name> <level> <config_file>
+export_fallback_env() {
+  local name="$1"
+  local level="$2"
+  local config_file="$3"
+
+  # Always start with primary agent env
+  export_agent_env "$name" "$config_file"
+
+  [[ "$level" -eq 0 ]] && return 0
+  [[ -z "$config_file" || ! -f "$config_file" ]] && return 0
+
+  # Overlay fallback-level env vars
+  local fb_idx=$((level - 1))
+  local env_keys
+  env_keys=$(config_get ".agents[] | select(.name == \"$name\") | .fallback[$fb_idx].env | keys | .[]" "" "$config_file")
+  [[ -z "$env_keys" || "$env_keys" == "null" ]] && return 0
+
+  while IFS= read -r key; do
+    [[ -z "$key" ]] && continue
+    local value
+    value=$(config_get ".agents[] | select(.name == \"$name\") | .fallback[$fb_idx].env.$key" "" "$config_file")
+    if [[ -n "$value" && "$value" != "null" ]]; then
+      local expanded_value
+      expanded_value=$(eval echo "$value")
+      export "$key=$expanded_value"
+    fi
+  done <<< "$env_keys"
+}
+
 # Acquire lock on PID file (non-blocking)
 # Uses flock if available, otherwise proceeds without locking (best effort)
 acquire_pid_lock() {
@@ -123,15 +216,19 @@ start_agent() {
     return 1
   fi
 
+  local fallback_state_file="$crew_dir/run/${name}.fallback"
+  local exhausted_file="$crew_dir/run/${name}.exhausted"
+
+  # Determine fallback chain depth
+  local fallback_count=0
+  if [[ -n "$config_file" && -f "$config_file" ]]; then
+    fallback_count=$(get_fallback_count "$name" "$config_file")
+  fi
+
   # Start agent in background
   (
-    # Export per-agent env vars (only affects this subshell)
-    export_agent_env "$name" "$config_file"
-
     cd "$working_dir" || exit 1
-    local restart_count=0
-    local delay="$interval"
-    
+
     _handle_term() {
       if [[ -n "${child_pid:-}" ]] && kill -0 "$child_pid" 2>/dev/null; then
         kill -TERM "$child_pid" 2>/dev/null || true
@@ -139,49 +236,87 @@ start_agent() {
     }
     trap _handle_term TERM INT
 
-    while true; do
-      rotate_log_if_needed "$log_file"
-      echo "[$name] Starting at $(timestamp)" >> "$log_file"
-      # Run command via eval to correctly parse quotes in yaml
-      eval "$command < \"$prompt_file\"" >> "$log_file" 2>&1 &
-      child_pid=$!
-      
-      wait "$child_pid" || true
-      wait "$child_pid" 2>/dev/null || true
-      local exit_code=$?
-      child_pid=""
+    local current_level=0
+    local max_level="$fallback_count"
 
-      echo "[$name] Exited with code $exit_code at $(timestamp)" >> "$log_file"
+    # Outer loop: iterate through fallback levels
+    while [[ "$current_level" -le "$max_level" ]]; do
+      # Export env for this fallback level
+      export_fallback_env "$name" "$current_level" "$config_file"
 
-      # Check if we should restart
-      if [[ ! -f "$pid_file" ]]; then
-        echo "[$name] PID file removed, stopping." >> "$log_file"
-        break
+      # Get per-level max_restarts
+      local level_max_restarts="$DEFAULT_MAX_RESTARTS"
+      if [[ -n "$config_file" && -f "$config_file" ]]; then
+        level_max_restarts=$(get_fallback_max_restarts "$name" "$current_level" "$config_file")
       fi
 
-      if [[ "$exit_code" -eq 0 ]]; then
-        # Normal cycle: reset backoff
-        restart_count=0
-        delay="$interval"
-      else
-        # Error: increment restart count, apply exponential backoff
-        restart_count=$((restart_count + 1))
-        if [[ "$restart_count" -ge "$DEFAULT_MAX_RESTARTS" ]]; then
-          echo "[$name] Max restarts ($DEFAULT_MAX_RESTARTS) reached. Giving up." >> "$log_file"
-          break
-        fi
-        # Exponential backoff: interval * 2^(n-1), capped at MAX_BACKOFF_DELAY
-        delay=$((interval * (1 << (restart_count - 1))))
-        if [[ "$delay" -gt "$MAX_BACKOFF_DELAY" ]]; then
-          delay="$MAX_BACKOFF_DELAY"
-        fi
-        echo "[$name] Error restart $restart_count/$DEFAULT_MAX_RESTARTS (backoff: ${delay}s)" >> "$log_file"
+      local level_label
+      level_label=$(get_fallback_label "$name" "$current_level" "${config_file:-}")
+
+      # Write fallback state for status display
+      echo "${current_level}|${level_label}" > "$fallback_state_file"
+
+      if [[ "$current_level" -gt 0 ]]; then
+        echo "[$name] Falling back to: $level_label (level $current_level)" >> "$log_file"
       fi
 
-      # Wait before restart
-      echo "[$name] Restarting in ${delay}s..." >> "$log_file"
-      sleep "$delay"
+      local restart_count=0
+      local delay="$interval"
+
+      # Inner loop: retry at current level
+      while true; do
+        rotate_log_if_needed "$log_file"
+        echo "[$name] Starting at $(timestamp) [$level_label]" >> "$log_file"
+        # Run command via eval to correctly parse quotes in yaml
+        eval "$command < \"$prompt_file\"" >> "$log_file" 2>&1 &
+        child_pid=$!
+
+        local exit_code=0
+        wait "$child_pid" || exit_code=$?
+        child_pid=""
+
+        echo "[$name] Exited with code $exit_code at $(timestamp) [$level_label]" >> "$log_file"
+
+        # Check if we should stop (PID file removed by stop_agent)
+        if [[ ! -f "$pid_file" ]]; then
+          echo "[$name] PID file removed, stopping." >> "$log_file"
+          rm -f "$fallback_state_file"
+          exit 0
+        fi
+
+        if [[ "$exit_code" -eq 0 ]]; then
+          # Success: reset backoff, stay at current level
+          restart_count=0
+          delay="$interval"
+        else
+          # Error: increment restart count
+          restart_count=$((restart_count + 1))
+          if [[ "$restart_count" -ge "$level_max_restarts" ]]; then
+            echo "[$name] Max restarts ($level_max_restarts) reached at level: $level_label" >> "$log_file"
+            break  # Break inner loop → try next fallback level
+          fi
+          # Exponential backoff: interval * 2^(n-1), capped at MAX_BACKOFF_DELAY
+          delay=$((interval * (1 << (restart_count - 1))))
+          if [[ "$delay" -gt "$MAX_BACKOFF_DELAY" ]]; then
+            delay="$MAX_BACKOFF_DELAY"
+          fi
+          echo "[$name] Error restart $restart_count/$level_max_restarts [$level_label] (backoff: ${delay}s)" >> "$log_file"
+        fi
+
+        # Wait before restart
+        echo "[$name] Restarting in ${delay}s..." >> "$log_file"
+        sleep "$delay"
+      done
+
+      # Move to next fallback level
+      current_level=$((current_level + 1))
     done
+
+    # All fallback levels exhausted
+    echo "[$name] All fallback levels exhausted. Giving up." >> "$log_file"
+    rm -f "$fallback_state_file"
+    rm -f "$pid_file"
+    echo "exhausted" > "$exhausted_file"
   ) < /dev/null &
 
   local pid=$!
@@ -190,6 +325,9 @@ start_agent() {
 
   log_ok "[$name] Started (PID: $pid)"
   log_info "[$name] Log: $log_file"
+  if [[ "$fallback_count" -gt 0 ]]; then
+    log_info "[$name] Fallback chain: $fallback_count level(s) configured"
+  fi
 }
 
 # Internal helper to recursively kill a process tree
@@ -254,6 +392,10 @@ stop_agent() {
   else
     log_warn "[$name] Process not found (already stopped)"
   fi
+
+  # Clean up fallback state files
+  rm -f "$crew_dir/run/${name}.fallback"
+  rm -f "$crew_dir/run/${name}.exhausted"
 
   release_pid_lock "$pid_file"
 }
@@ -406,11 +548,16 @@ watchdog_loop() {
           restart_agent "$name" "$config_file"
           ;;
         stopped)
-          log_warn "[$name] Not running, starting..."
-          local command prompt_file
-          command=$(config_get ".agents[] | select(.name == \"$name\") | .command" "" "$config_file")
-          prompt_file=$(config_get ".agents[] | select(.name == \"$name\") | .prompt" "" "$config_file")
-          start_agent "$name" "$command" "$prompt_file"
+          # Don't auto-restart if all fallback levels were exhausted
+          if [[ -f ".crew/run/${name}.exhausted" ]]; then
+            log_warn "[$name] All fallback levels exhausted, not restarting"
+          else
+            log_warn "[$name] Not running, starting..."
+            local command prompt_file
+            command=$(config_get ".agents[] | select(.name == \"$name\") | .command" "" "$config_file")
+            prompt_file=$(config_get ".agents[] | select(.name == \"$name\") | .prompt" "" "$config_file")
+            start_agent "$name" "$command" "$prompt_file"
+          fi
           ;;
       esac
     done

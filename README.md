@@ -196,6 +196,49 @@ Set `ANTHROPIC_API_KEY` in your shell environment instead:
 export ANTHROPIC_API_KEY="sk-..."
 ```
 
+## Model Fallback
+
+When an agent fails repeatedly (reaching `max_restarts`), it can automatically fall back to alternative models or providers. Configure a `fallback` chain per-agent in `.crew/crew.yaml`.
+
+### Fallback Order
+
+```
+Primary (env)  →  fallback[0]  →  fallback[1]  →  ... → exhausted (stop)
+   opus             sonnet          openrouter
+```
+
+### Configuration
+
+```yaml
+agents:
+  - name: DEV
+    command: rm -rf .claude/conversations && claude --dangerously-skip-permissions
+    prompt: prompts/dev.md
+    max_restarts: 5
+    env:
+      ANTHROPIC_MODEL: claude-opus-4-20250514
+
+    fallback:
+      - label: sonnet
+        max_restarts: 3
+        env:
+          ANTHROPIC_MODEL: claude-sonnet-4-20250514
+
+      - label: openrouter-sonnet
+        max_restarts: 3
+        env:
+          ANTHROPIC_BASE_URL: https://openrouter.ai/api/v1
+          ANTHROPIC_MODEL: anthropic/claude-sonnet-4-20250514
+```
+
+### Behavior
+
+- Each level retries up to its `max_restarts` (default: 5) with exponential backoff
+- On success at any level, the agent **stays at that level** (does not revert)
+- After all levels are exhausted, the agent stops and will not be auto-restarted
+- Use `crew restart AGENT` to reset the fallback chain and start from primary
+- `crew status` shows the current active fallback level
+
 ## Environment Variables
 
 | Variable | Description |
