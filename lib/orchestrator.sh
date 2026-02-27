@@ -44,12 +44,12 @@ cross_review_loop() {
   # Validate prompt files exist
   if [[ ! -f "$writer_prompt" ]]; then
     log_error "Plan writer prompt not found: $writer_prompt"
-    log_info "Expected at: $design_dir/prompts/plan_writer.md or $(get_crew_home)/prompts/cross-review/plan_writer.md"
+    log_info "Expected at: $design_dir/prompts/plan_writer.md or $(get_crew_home)/prompts/design-review/plan_writer.md"
     return 1
   fi
   if [[ ! -f "$reviewer_prompt" ]]; then
     log_error "Reviewer prompt not found: $reviewer_prompt"
-    log_info "Expected at: $design_dir/prompts/reviewer.md or $(get_crew_home)/prompts/cross-review/reviewer.md"
+    log_info "Expected at: $design_dir/prompts/reviewer.md or $(get_crew_home)/prompts/design-review/reviewer.md"
     return 1
   fi
 
@@ -206,8 +206,8 @@ resolve_prompt_path() {
   fi
   
   # Default prompts in crew home
-  if [[ -f "$crew_home/prompts/cross-review/$(basename "$prompt_path")" ]]; then
-    echo "$crew_home/prompts/cross-review/$(basename "$prompt_path")"
+  if [[ -f "$crew_home/prompts/design-review/$(basename "$prompt_path")" ]]; then
+    echo "$crew_home/prompts/design-review/$(basename "$prompt_path")"
     return
   fi
   
@@ -219,10 +219,16 @@ resolve_prompt_path() {
 design_init() {
   local idea="$*"
   local design_dir=".design"
-  
+
   if [[ -z "$idea" ]]; then
-    log_error "Usage: design init <idea description>"
+    log_error "Usage: design init <idea description or filename>"
     return 1
+  fi
+
+  # If argument is a file, read its content as the idea
+  if [[ -f "$idea" ]]; then
+    log_info "Reading idea from file: $idea"
+    idea=$(cat "$idea")
   fi
   
   header "Initializing Design Session"
@@ -264,13 +270,13 @@ EOF
   local crew_home
   crew_home=$(get_crew_home)
   
-  if [[ -f "$crew_home/prompts/cross-review/plan_writer.md" ]]; then
-    cp "$crew_home/prompts/cross-review/plan_writer.md" "$design_dir/prompts/"
+  if [[ -f "$crew_home/prompts/design-review/plan_writer.md" ]]; then
+    cp "$crew_home/prompts/design-review/plan_writer.md" "$design_dir/prompts/"
     log_ok "Copied default plan_writer.md"
   fi
   
-  if [[ -f "$crew_home/prompts/cross-review/reviewer.md" ]]; then
-    cp "$crew_home/prompts/cross-review/reviewer.md" "$design_dir/prompts/"
+  if [[ -f "$crew_home/prompts/design-review/reviewer.md" ]]; then
+    cp "$crew_home/prompts/design-review/reviewer.md" "$design_dir/prompts/"
     log_ok "Copied default reviewer.md"
   fi
   

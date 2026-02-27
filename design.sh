@@ -31,7 +31,7 @@ ${BOLD}USAGE${NC}
   design <command> [options]
 
 ${BOLD}COMMANDS${NC}
-  init <idea>      Initialize new design session with your idea
+  init <idea|file> Initialize new design session with idea or file
   review           Start or continue cross-review loop
   status           Show current review status
   reset            Reset session (keeps idea.txt)
@@ -43,8 +43,11 @@ ${BOLD}OPTIONS${NC}
                    (or set CREW_AGENT environment variable)
 
 ${BOLD}EXAMPLES${NC}
-  # Start a new design session
+  # Start a new design session with inline text
   design init "A CLI tool for managing multiple AI agents"
+
+  # Start from a file
+  design init brainstorm.md
 
   # Run cross-review loop
   design review
