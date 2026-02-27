@@ -1,0 +1,27 @@
+# Workflow: code-review (QA + DEV)
+# QA hunts bugs and writes failing tests; DEV fixes them.
+
+project: my-project
+check_interval: 30
+
+agents:
+  - name: QA
+    icon: "\U0001F534"
+    type: claude
+    prompt: prompts/qa.md
+    interval: 10
+    timeout: 600
+    max_restarts: 5
+    working_dirs:
+      - tests/
+      - docs/
+
+  - name: DEV
+    icon: "\U0001F535"
+    type: claude
+    prompt: prompts/dev.md
+    interval: 10
+    timeout: 600
+    max_restarts: 5
+    working_dirs:
+      - src/

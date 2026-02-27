@@ -59,7 +59,7 @@ lib/
 │   Used by: ALL modules                                           │
 ├──────────────────────────────────────────────────────────────────┤
 ├── config.sh         ─────────────────────────────────────────────┐
-│   YAML parsing: yq primary, Python fallback                      │
+│   YAML/JSON parsing: yq (required)                                  │
 │   Functions: parse_yaml, config_get, validate_config             │
 │   Used by: orchestrator.sh, watchdog.sh, status.sh               │
 ├──────────────────────────────────────────────────────────────────┤
@@ -173,13 +173,13 @@ lib/
 │                              │  (grep "PASS: true")    │            │
 │                              └────────────┬────────────┘            │
 │                                           │                         │
-│                    ┌──────────────────────┼──────────────────────┐  │
-│                    │                      │                      │  │
-│              ┌─────▼─────┐          ┌─────▼─────┐          ┌─────▼──│
-│              │   PASS    │          │   FAIL    │          │CONFLICT│
-│              │  Exit 0   │          │  Continue │          │ Exit 3 │
-│              └───────────┘          │   Loop    │          └────────│
-│                                     └─────┬─────┘                   │
+│                              ┌──────────────┼──────────────┐      │
+│                              │              │              │      │
+│                        ┌─────▼─────┐  ┌─────▼─────┐             │
+│                        │   PASS    │  │   FAIL    │             │
+│                        │  Exit 0   │  │  Continue │             │
+│                        └───────────┘  │   Loop    │             │
+│                                       └─────┬─────┘             │
 │                                           │                         │
 │                                           └──────────▶ (next iter)  │
 └────────────────────────────────────────────────────────────────────┘
@@ -333,10 +333,10 @@ lib/
 │     Default: 2 consecutive identical hashes                      │
 │                                                                  │
 │  3. CONFLICT (exit 3)                                           │
-│     ─────────────                                                │
-│     Same issue titles appear conflict_threshold times           │
-│     Detection: grep "### [CATEGORY]:" from last N reviews       │
-│     Default: 3 repeated issues                                   │
+│     ───────────────                                              │
+│     Same issue headings (## / ###) appear in last N reviews     │
+│     N = conflict_threshold (default: 3)                          │
+│     Requires history enabled; uses heading intersection          │
 │                                                                  │
 │  4. MAX_ITER (exit 1)                                           │
 │     ─────────────                                                │

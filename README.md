@@ -1,5 +1,7 @@
 # crew
 
+**When Claude rate-limits, automatically switch to Gemini. When that fails, run your own script.**
+
 > Adversarial Multi-Agent Orchestration Tool for AI-assisted development
 
 > **WARNING**: This tool launches AI agents that run with **full access to your codebase and system**.
@@ -18,8 +20,17 @@
 
 ## Installation
 
+### Homebrew (macOS)
+
 ```bash
-git clone https://github.com/YOUR_USERNAME/crew ~/dev/crew
+brew tap garnetlyx/crew
+brew install crew
+```
+
+### From Source
+
+```bash
+git clone https://github.com/garnetlyx/crew ~/dev/crew
 cd ~/dev/crew
 ./install.sh
 ```
@@ -28,6 +39,14 @@ This creates symlinks in `~/.local/bin`. If not already in PATH, add to your she
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
+```
+
+To uninstall:
+
+```bash
+cd ~/dev/crew
+./uninstall.sh
+# Or: brew uninstall crew
 ```
 
 Requires:
@@ -153,6 +172,48 @@ agents:
 
 > **Note**: Changes to `crew.yaml` (including `interval` and `env` variables) require a restart of the affected agents to take effect. Run `crew restart [AGENT]` to apply changes.
 ```
+
+### JSON Config Alternative
+
+If you prefer JSON over YAML, create `.crew/crew.json` instead. The JSON format uses `python3` (built-in `json` module, no pip install needed) and supports the same fields:
+
+```json
+{
+  "project": "my-project",
+  "check_interval": 30,
+  "agents": [
+    {
+      "name": "QA",
+      "type": "claude",
+      "prompt": "prompts/qa.md",
+      "interval": 10,
+      "timeout": 600
+    }
+  ]
+}
+```
+
+YAML takes priority when both `.crew/crew.yaml` and `.crew/crew.json` exist. JSON config requires `python3` to be available.
+
+### Workflow Templates
+
+Get started quickly with preset configurations:
+
+```bash
+# List available templates
+crew init --list-templates
+
+# Initialize with a template
+crew init --template code-review
+```
+
+| Template | Agents | Use Case |
+|----------|--------|----------|
+| `code-review` | QA + DEV | Adversarial testing and bug fixing |
+| `refactor` | DEV + JANITOR | Code improvement with doc maintenance |
+| `security-audit` | QA + DEV | Vulnerability probing and patching |
+| `docs` | DEV + JANITOR | Documentation writing and consistency |
+| `full` | QA + DEV + JANITOR | All agents running together |
 
 ### Files
 
@@ -488,6 +549,31 @@ crew validate    # check config syntax
 crew start       # test agents start correctly
 crew status      # confirm all running
 crew stop        # clean shutdown
+```
+
+## Testing
+
+Requires [bats-core](https://github.com/bats-core/bats-core):
+
+```bash
+# macOS
+brew install bats-core
+
+# Linux (apt)
+sudo apt-get install bats
+```
+
+Run tests:
+
+```bash
+# All unit tests
+bats tests/unit/
+
+# Specific test file
+bats tests/unit/test_utils.bats
+
+# Integration tests
+bats tests/integration/
 ```
 
 ## License

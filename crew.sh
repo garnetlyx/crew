@@ -2,7 +2,7 @@
 # crew - Multi-agent parallel orchestration
 #
 # Usage:
-#   crew init            Create .crew/ with template config
+#   crew init [--template T]  Create .crew/ with config
 #   crew start [AGENT..] Start all or specific agents
 #   crew stop [AGENT..]  Stop all or specific agents
 #   crew restart [AGENT] Restart agent(s)
@@ -10,6 +10,8 @@
 #   crew ps              Show active agent processes
 #   crew monitor         Real-time dashboard
 #   crew logs AGENT      Tail agent logs
+#   crew cost            Show token usage and cost estimates
+#   crew context         Show/edit shared agent context
 #   crew validate        Check config syntax
 
 set -euo pipefail
@@ -27,10 +29,13 @@ source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/plugin_loader.sh"
 source "$SCRIPT_DIR/lib/watchdog.sh"
 source "$SCRIPT_DIR/lib/status.sh"
+source "$SCRIPT_DIR/lib/cost.sh"
 
 VERSION="0.2.0"
 CREW_DIR=".crew"
 CONFIG_FILE="$CREW_DIR/crew.yaml"
+WATCHDOG_ENABLED=true
+CHECK_INTERVAL=""
 
 usage() {
   cat << EOF
@@ -40,7 +45,7 @@ ${BOLD}USAGE${NC}
   crew <command> [options]
 
 ${BOLD}COMMANDS${NC}
-  init                 Create .crew/ with template config
+  init [--template T]  Create .crew/ with config (optionally from template)
   start [AGENT...]     Start all or specific agents
   stop [AGENT...]      Stop all or specific agents
   restart [AGENT...]   Restart agent(s)
@@ -48,7 +53,12 @@ ${BOLD}COMMANDS${NC}
   ps                   Show active agent processes
   monitor              Real-time dashboard
   logs <AGENT>         Tail agent logs
+  report               Show agent activity summary and conflicts
+  cost                 Show runtime and cost estimates per agent
+  context [show|edit|clear]  Manage shared context between agents
   plugins              List available CLI plugins
+  edit <AGENT>         Edit agent prompt in \$EDITOR
+  serve --mcp          Start MCP server (JSON-RPC over stdio)
   validate             Check config syntax
   help                 Show this help
 
@@ -57,8 +67,14 @@ ${BOLD}OPTIONS${NC}
   --no-watchdog        Start agents without watchdog
 
 ${BOLD}EXAMPLES${NC}
-  # Initialize in a project
+  # Initialize with default config
   crew init
+
+  # Initialize with a workflow template
+  crew init --template code-review
+
+  # List available templates
+  crew init --list-templates
 
   # Start all agents
   crew start
@@ -78,8 +94,22 @@ ${BOLD}EXAMPLES${NC}
   # Monitor in real-time
   crew monitor
 
+  # Edit agent prompt
+  crew edit QA
+
   # View logs
   crew logs QA
+
+  # Check config before starting
+  crew validate
+
+${BOLD}TROUBLESHOOTING${NC}
+  "No config found"       Run 'crew init' first
+  "CLI not installed"     Install the agent CLI (see 'crew plugins')
+  "Prompt file not found" Check paths in .crew/crew.yaml
+  "yq is required"        Install yq: brew install yq
+  Agents keep restarting  Check .crew/logs/<AGENT>.log for errors
+  Ghost processes         Run 'crew stop' then 'crew ps' to verify
 
 ${BOLD}FILES${NC}
   .crew/
@@ -93,52 +123,138 @@ ${BOLD}VERSION${NC}
 EOF
 }
 
+# List available workflow templates
+crew_list_templates() {
+  local crew_home
+  crew_home=$(get_crew_home)
+  local templates_dir="$crew_home/templates/workflows"
+
+  if [[ ! -d "$templates_dir" ]]; then
+    log_error "No templates directory found"
+    return 1
+  fi
+
+  header "Available Workflow Templates"
+  echo ""
+
+  for template_dir in "$templates_dir"/*/; do
+    [[ ! -d "$template_dir" ]] && continue
+    local name
+    name=$(basename "$template_dir")
+    local desc=""
+    if [[ -f "$template_dir/description.txt" ]]; then
+      desc=$(head -1 "$template_dir/description.txt")
+    fi
+    printf "  %-18s %s\n" "$name" "$desc"
+  done
+
+  echo ""
+  log_info "Usage: crew init --template <name>"
+}
+
 # Initialize crew in current directory
 crew_init() {
+  local template=""
+
+  # Parse init-specific flags
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --template)
+        shift
+        [[ $# -eq 0 ]] && { log_error "--template requires a name"; return 1; }
+        template="$1"
+        shift
+        ;;
+      --list-templates)
+        crew_list_templates
+        return 0
+        ;;
+      *)
+        log_error "Unknown option for init: $1"
+        return 1
+        ;;
+    esac
+  done
+
   header "Initializing Crew"
-  
+
   if [[ -d "$CREW_DIR" ]]; then
     if ! confirm ".$CREW_DIR already exists. Overwrite config?"; then
       return 0
     fi
   fi
-  
+
   ensure_dir "$CREW_DIR"
   ensure_dir "$CREW_DIR/prompts"
   ensure_dir "$CREW_DIR/logs"
   ensure_dir "$CREW_DIR/run"
-  
-  # Copy default config from templates
-  local crew_home
-  crew_home=$(get_crew_home)
-  
-  if [[ -f "$crew_home/templates/crew.yaml.example" ]]; then
-    cp "$crew_home/templates/crew.yaml.example" "$CONFIG_FILE"
-    log_ok "Created $CONFIG_FILE from template"
-  else
-    log_error "Template not found: $crew_home/templates/crew.yaml.example"
-    return 1
-  fi
+  ensure_dir "$CREW_DIR/shared"
 
-  # Copy default prompts from crew home
   local crew_home
   crew_home=$(get_crew_home)
 
-  for role in qa dev janitor; do
-    if [[ -f "$crew_home/prompts/crew/${role}.md" ]]; then
-      cp "$crew_home/prompts/crew/${role}.md" "$CREW_DIR/prompts/"
-      log_ok "Copied prompts/${role}.md"
-    else
-      log_warn "Default prompt not found: prompts/crew/${role}.md"
+  if [[ -n "$template" ]]; then
+    # Use workflow template
+    local template_dir="$crew_home/templates/workflows/$template"
+    if [[ ! -d "$template_dir" ]]; then
+      log_error "Unknown template: $template"
+      log_info "Run 'crew init --list-templates' to see available templates"
+      return 1
     fi
-  done
+
+    if [[ ! -f "$template_dir/crew.yaml" ]]; then
+      log_error "Template missing crew.yaml: $template_dir"
+      return 1
+    fi
+
+    # Copy template config, substitute project name
+    # Escape sed special characters (&, /, \) in project name to prevent injection
+    local project_name
+    project_name=$(basename "$PWD" | sed 's/[&/\]/\\&/g')
+    sed "s/^project: .*/project: $project_name/" "$template_dir/crew.yaml" > "$CONFIG_FILE"
+    log_ok "Created $CONFIG_FILE from template: $template"
+
+    # Copy only the prompts referenced in the template
+    local agent_prompts
+    agent_prompts=$(grep -oE 'prompts/[a-z_-]+\.md' "$CONFIG_FILE" 2>/dev/null || true)
+    for prompt_ref in $agent_prompts; do
+      local prompt_basename
+      prompt_basename=$(basename "$prompt_ref")
+      local role="${prompt_basename%.md}"
+      if [[ -f "$crew_home/prompts/crew/${role}.md" ]]; then
+        cp "$crew_home/prompts/crew/${role}.md" "$CREW_DIR/prompts/"
+        log_ok "Copied prompts/${role}.md"
+      else
+        log_warn "Default prompt not found: prompts/crew/${role}.md"
+      fi
+    done
+  else
+    # Default: copy full example config
+    if [[ -f "$crew_home/templates/crew.yaml.example" ]]; then
+      cp "$crew_home/templates/crew.yaml.example" "$CONFIG_FILE"
+      log_ok "Created $CONFIG_FILE from template"
+    else
+      log_error "Template not found: $crew_home/templates/crew.yaml.example"
+      return 1
+    fi
+
+    # Copy all default prompts
+    for role in qa dev janitor; do
+      if [[ -f "$crew_home/prompts/crew/${role}.md" ]]; then
+        cp "$crew_home/prompts/crew/${role}.md" "$CREW_DIR/prompts/"
+        log_ok "Copied prompts/${role}.md"
+      else
+        log_warn "Default prompt not found: prompts/crew/${role}.md"
+      fi
+    done
+  fi
 
   # Copy .env.example
   if [[ -f "$crew_home/templates/.env.example" ]]; then
     cp "$crew_home/templates/.env.example" "$CREW_DIR/.env.example"
     log_ok "Copied .env.example"
   fi
-  
+
   echo ""
   log_info "Crew initialized!"
   log_info "Edit $CONFIG_FILE to configure agents"
@@ -148,16 +264,22 @@ crew_init() {
 # Start agents
 crew_start() {
   local agents=("$@")
-  
+
   if [[ ! -f "$CONFIG_FILE" ]]; then
     log_error "No config found. Run 'crew init' first."
     return 1
   fi
-  
+
+  validate_yaml_parser || return 1
+
+  # Pre-flight: validate prompt files and CLI tools before starting
+  validate_crew_preflight "$CONFIG_FILE" "$@" || return 1
+
   # Cleanup trap: stop all agents on exit/interrupt
   _crew_cleanup() {
     local exit_code=$?
     trap - EXIT INT TERM
+    stop_watchdog 2>/dev/null || true
     stop_all_agents 2>/dev/null || true
     exit "$exit_code"
   }
@@ -199,18 +321,48 @@ crew_start() {
       start_agent "$name" "$CREW_DIR/$prompt_file" "$interval" "$PWD" "$CONFIG_FILE" || true
     done
   fi
-  
+
+  # Start watchdog loop in background if enabled
+  if [[ "$WATCHDOG_ENABLED" == "true" ]]; then
+    # Priority: CLI flag > config file > hardcoded default
+    local wd_interval="$CHECK_INTERVAL"
+    if [[ -z "$wd_interval" ]]; then
+      wd_interval=$(config_get ".check_interval" "$DEFAULT_CHECK_INTERVAL" "$CONFIG_FILE")
+    fi
+    (
+      watchdog_loop "$CONFIG_FILE" "$wd_interval"
+    ) < /dev/null &
+    local wd_pid=$!
+    _write_pid "$wd_pid" "$CREW_DIR/run/watchdog.pid"
+    log_info "Watchdog started (PID: $wd_pid, interval: ${wd_interval}s)"
+  fi
+
   # Success: clear trap so we don't kill agents on exit
   trap - EXIT INT TERM
+}
+
+# Stop the watchdog process if running
+stop_watchdog() {
+  local wd_pid_file="$CREW_DIR/run/watchdog.pid"
+  if [[ -f "$wd_pid_file" ]]; then
+    local wd_pid
+    wd_pid=$(_read_pid "$wd_pid_file")
+    if kill -0 "$wd_pid" 2>/dev/null; then
+      kill -TERM "$wd_pid" 2>/dev/null || true
+      log_info "Watchdog stopped (PID: $wd_pid)"
+    fi
+    rm -f "$wd_pid_file"
+  fi
 }
 
 # Stop agents
 crew_stop() {
   local agents=("$@")
-  
+
   header "Stopping Agents"
-  
+
   if [[ ${#agents[@]} -eq 0 ]]; then
+    stop_watchdog
     stop_all_agents
   else
     for name in "${agents[@]}"; do
@@ -223,9 +375,9 @@ crew_stop() {
 # Restart agents
 crew_restart() {
   local agents=("$@")
-  
+
   header "Restarting Agents"
-  
+
   if [[ ${#agents[@]} -eq 0 ]]; then
     stop_all_agents
     sleep 2
@@ -244,7 +396,7 @@ crew_status() {
     log_error "No config found. Run 'crew init' first."
     return 1
   fi
-  
+
   show_status "$CONFIG_FILE"
 }
 
@@ -254,7 +406,7 @@ crew_ps() {
     log_error "No config found. Run 'crew init' first."
     return 1
   fi
-  
+
   show_processes "$CONFIG_FILE"
 }
 
@@ -264,14 +416,14 @@ crew_monitor() {
     log_error "No config found. Run 'crew init' first."
     return 1
   fi
-  
+
   monitor_loop "$CONFIG_FILE"
 }
 
 # Tail logs
 crew_logs() {
   local name="$1"
-  
+
   if [[ -z "$name" ]]; then
     log_error "Usage: crew logs <AGENT>"
     return 1
@@ -286,6 +438,117 @@ crew_plugins() {
   list_plugins
 }
 
+# Edit agent prompt
+crew_edit() {
+  local name="${1:-}"
+
+  if [[ -z "$name" ]]; then
+    log_error "Usage: crew edit <AGENT>"
+    return 1
+  fi
+
+  validate_agent_name "$name" || return 1
+
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    log_error "No config found. Run 'crew init' first."
+    return 1
+  fi
+
+  local prompt_file
+  prompt_file=$(config_get ".agents[] | select(.name == \"$name\") | .prompt" "" "$CONFIG_FILE")
+
+  if [[ -z "$prompt_file" || "$prompt_file" == "null" ]]; then
+    log_error "[$name] Not found in config"
+    return 1
+  fi
+
+  local full_path="$CREW_DIR/$prompt_file"
+  if [[ ! -f "$full_path" ]]; then
+    log_error "[$name] Prompt file not found: $full_path"
+    return 1
+  fi
+
+  local editor="${EDITOR:-vi}"
+  "$editor" "$full_path"
+}
+
+# Show cost/runtime estimates
+crew_cost() {
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    log_error "No config found. Run 'crew init' first."
+    return 1
+  fi
+
+  show_cost "$CONFIG_FILE"
+}
+
+# Show aggregated report
+crew_report() {
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    log_error "No config found. Run 'crew init' first."
+    return 1
+  fi
+
+  show_report "$CONFIG_FILE"
+}
+
+# Show or edit shared context
+crew_context() {
+  local action="${1:-show}"
+
+  ensure_dir "$CREW_DIR/shared"
+  local context_file="$CREW_DIR/shared/context.md"
+
+  case "$action" in
+    show)
+      header "Shared Context"
+      if [[ -f "$context_file" ]] && [[ -s "$context_file" ]]; then
+        cat "$context_file"
+      else
+        log_info "No shared context. Use 'crew context edit' to add one."
+      fi
+      ;;
+    edit)
+      if [[ ! -f "$context_file" ]]; then
+        cat > "$context_file" << 'TMPL'
+# Shared Context
+
+> This file is automatically injected into all agent prompts.
+> Agents can read this context at the start of each run.
+> Use it to share state, decisions, or instructions between agents.
+
+TMPL
+      fi
+      local editor="${EDITOR:-vi}"
+      "$editor" "$context_file"
+      ;;
+    clear)
+      if [[ -f "$context_file" ]]; then
+        rm -f "$context_file"
+        log_ok "Shared context cleared"
+      else
+        log_info "No shared context to clear"
+      fi
+      ;;
+    *)
+      log_error "Usage: crew context [show|edit|clear]"
+      return 1
+      ;;
+  esac
+}
+
+# Start MCP server
+crew_serve() {
+  local mode="${1:-}"
+
+  if [[ "$mode" != "--mcp" ]]; then
+    log_error "Usage: crew serve --mcp"
+    return 1
+  fi
+
+  exec "$SCRIPT_DIR/crew-mcp.sh"
+}
+
 # Validate config
 crew_validate() {
   if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -298,12 +561,47 @@ crew_validate() {
 
 # Main
 main() {
+  # BUG-QA-103: Resolve symlinks in project directory to prevent symlink-based attacks.
+  # Uses cd -P to get the physical path (no symlinks) instead of relying on $PWD.
+  if [[ -L "$PWD" ]] || [[ "$(cd -P . && pwd)" != "$PWD" ]]; then
+    cd -P .
+    log_debug "Resolved symlinked working directory to: $PWD"
+  fi
+
+  # Parse global options
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --check-interval)
+        shift
+        [[ $# -eq 0 ]] && { log_error "--check-interval requires a value"; exit 1; }
+        CHECK_INTERVAL="$1"
+        validate_interval "$CHECK_INTERVAL" || exit 1
+        shift
+        ;;
+      --no-watchdog)
+        WATCHDOG_ENABLED=false
+        shift
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      --version|-v)
+        echo "crew $VERSION"
+        exit 0
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
   local cmd="${1:-help}"
   shift 2>/dev/null || true
-  
+
   case "$cmd" in
     init)
-      crew_init
+      crew_init "$@"
       ;;
     start)
       crew_start "$@"
@@ -326,8 +624,23 @@ main() {
     logs)
       crew_logs "$@"
       ;;
+    edit)
+      crew_edit "$@"
+      ;;
     plugins)
       crew_plugins
+      ;;
+    report)
+      crew_report
+      ;;
+    context)
+      crew_context "$@"
+      ;;
+    cost)
+      crew_cost
+      ;;
+    serve)
+      crew_serve "$@"
       ;;
     validate)
       crew_validate
@@ -347,4 +660,7 @@ main() {
   esac
 }
 
-main "$@"
+# Only run main when executed directly, not when sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi

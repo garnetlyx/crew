@@ -1,0 +1,28 @@
+# Workflow: docs (DEV + JANITOR)
+# DEV writes new documentation; JANITOR maintains consistency.
+
+project: my-project
+check_interval: 30
+
+agents:
+  - name: DEV
+    icon: "\U0001F535"
+    type: claude
+    prompt: prompts/dev.md
+    interval: 10
+    timeout: 600
+    max_restarts: 5
+    working_dirs:
+      - docs/
+      - "*.md"
+
+  - name: JANITOR
+    icon: "\U0001F7E2"
+    type: claude
+    prompt: prompts/janitor.md
+    interval: 1800
+    timeout: 600
+    max_restarts: 5
+    working_dirs:
+      - docs/
+      - "*.md"
