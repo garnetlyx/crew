@@ -1,7 +1,6 @@
 # Agent runtime
-.crew/logs/
-.crew/run/
-.design/history/
+.crew/
+.design/
 
 # Evaluation files (local only)
 docs/EVAL.md
