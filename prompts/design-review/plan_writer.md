@@ -28,7 +28,7 @@ You receive these as injected context (not all may be present):
 
 ## Output Constraints (CRITICAL)
 
-You MUST use your file writing tool (e.g. `write_file` or `bash`) to save the final markdown to `.design/plan.md`. Do NOT just output the text in your response message. 
+You MUST use your file writing tool (e.g. `write_file` or `bash`) to save the final markdown to `.design/plan.md`. Do NOT just output the text in your response message.
 Do NOT create, modify, or read any other files. Do not output conversational filler.
 
 ---

@@ -14,7 +14,7 @@ Thank you for your interest in contributing to crew! This guide will help you ge
 1. Fork and clone the repository:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/crew.git
+git clone https://github.com/garnetlyx/crew.git
 cd crew
 ```
 

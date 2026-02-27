@@ -39,7 +39,8 @@ crew/
 │   ├── orchestrator.sh  # Design-review loop engine
 │   ├── watchdog.sh      # Agent health monitoring
 │   ├── agent_runner.sh  # Design mode agent interface
-│   └── status.sh        # Status display, monitoring
+│   ├── status.sh        # Status display, monitoring
+│   └── cost.sh          # Token/cost tracking from agent logs
 ├── prompts/
 │   ├── crew/
 │   │   ├── qa.md            # QA agent prompt
@@ -100,6 +101,7 @@ Termination conditions:
 | `config.sh` | YAML parsing with yq or Python fallback |
 | `utils.sh` | Logging (log_info, log_ok, log_warn, log_error), helpers |
 | `status.sh` | Status table display, real-time monitor |
+| `cost.sh` | Token/cost tracking, log parsing per CLI type |
 
 ## Coding Conventions
 
