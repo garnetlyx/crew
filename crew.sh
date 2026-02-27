@@ -31,7 +31,7 @@ source "$SCRIPT_DIR/lib/watchdog.sh"
 source "$SCRIPT_DIR/lib/status.sh"
 source "$SCRIPT_DIR/lib/cost.sh"
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 CREW_DIR=".crew"
 CONFIG_FILE="$CREW_DIR/crew.yaml"
 WATCHDOG_ENABLED=true

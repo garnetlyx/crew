@@ -31,7 +31,7 @@ source "$SCRIPT_DIR/lib/watchdog.sh"
 source "$SCRIPT_DIR/lib/status.sh"
 source "$SCRIPT_DIR/lib/orchestrator.sh"
 
-MCP_VERSION="0.2.0"
+MCP_VERSION="0.3.0"
 PROTOCOL_VERSION="2024-11-05"
 
 # ── JSON helpers (python3, no dependencies) ────────────────────────────────
