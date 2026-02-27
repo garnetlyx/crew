@@ -101,15 +101,12 @@ FILES_MODIFIED: [count]
 
 # Project Specific Guidelines
 
-<!--
-  Add your project-specific rules here.
-  Examples:
-  - "Always use 'foo' instead of 'bar'"
-  - "Check database migrations in /db/migrations"
-  - "Run specific linter command: npm run lint:custom"
+<!-- Uncomment and customize for your project:
+- Branch: work exclusively on `feature/xxx` — do NOT commit to main
+- Lint command: `npm run lint`
+- Test command: `npm test`
+- Focus areas: `src/auth/`, `src/api/`
 -->
-
-(No specific guidelines provided yet.)
 
 # ⚡ IMMEDIATE ACTION REQUIRED
 

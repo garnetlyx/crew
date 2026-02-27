@@ -31,7 +31,6 @@
 # interval       Seconds between runs (default: 10)
 # timeout        Kill if no output for N seconds (default: 600)
 # max_restarts   Retries before moving to next fallback level (default: 5)
-# working_dirs   Advisory list of dirs the agent should modify
 # env            Per-agent environment variables
 # fallback       Array of fallback levels (label, type, env, max_restarts)
 # ══════════════════════════════════════════════════════════════════════
@@ -39,6 +38,35 @@
 project: my-project
 log_dir: .crew/logs
 check_interval: 30  # Health check interval (seconds)
+
+# ── Progress Watchdog ──────────────────────────────────────────────
+# Monitors agents for stuck/idle behavior using heuristics + optional
+# AI judge. The watchdog runs lightweight Bash checks at check_interval;
+# if an agent shows no progress for idle_timeout, it's flagged SUSPECT.
+#
+# When ai_judge is enabled, a one-shot LLM call (rate-limited to 1/hour
+# per agent) reviews logs and renders a STUCK/PRODUCTIVE/UNCERTAIN verdict.
+# When disabled, SUSPECT triggers on_stuck directly.
+#
+# on_stuck actions:
+#   fallback  — advance to next fallback level (writes .advance marker)
+#   restart   — kill and restart the agent at current level
+#   notify    — run on_stuck_command (e.g. Slack/SMS alert)
+#   stop      — stop the agent entirely
+# ───────────────────────────────────────────────────────────────────
+watchdog:
+  enabled: false               # Set true to activate progress monitoring
+  check_interval: 900          # 15min between lightweight Bash checks
+  idle_timeout: 1800           # 30min no progress → SUSPECT
+  on_stuck: fallback           # Action: fallback | restart | notify | stop
+  # on_stuck_command: ./scripts/alert.sh  # Required when on_stuck: notify
+
+  ai_judge:
+    enabled: false             # Opt-in; adds LLM cost per stuck event
+    type: claude               # CLI plugin for the judge call
+    prompt: prompts/crew/watchdog.md
+    env:
+      ANTHROPIC_MODEL: claude-haiku-4-5-20251001  # Use cheapest model
 
 agents:
 
@@ -58,10 +86,6 @@ agents:
     interval: 10
     timeout: 600
     max_restarts: 5
-    working_dirs:
-      - docs/
-      - e2e/
-      - server/src/__tests__/
 
     # Primary: Claude CLI with Opus (premium model)
     env:
@@ -104,9 +128,6 @@ agents:
     interval: 10
     timeout: 600
     max_restarts: 5
-    working_dirs:
-      - server/src/
-      - client/src/
 
     # Primary: Claude CLI (Anthropic)
     env:
@@ -160,10 +181,6 @@ agents:
     interval: 1800     # 30 minutes - lightweight maintenance task
     timeout: 600
     max_restarts: 5
-    working_dirs:
-      - docs/
-      - "*.md"
-      - "*screenshot*"
 
     # Primary: Claude CLI
     env:
