@@ -125,7 +125,9 @@ agents:
     # max_restarts: 5           # Retries before fallback (default: 5)
     # Per-agent environment variables
     # env:
-    #   ANTHROPIC_MODEL: claude-sonnet-4-20250514
+    #   ANTHROPIC_BASE_URL: ${1ST_ANT_URL}
+    #   ANTHROPIC_MODEL: ${1ST_ANT_MODEL}
+    #   ANTHROPIC_API_KEY: ${1ST_ANT_KEY}
     #
     # Model fallback chain (tried in order when max_restarts exhausted):
     # fallback:
@@ -166,15 +168,28 @@ agents:
 # ──────────────────────────────────────────────
 # 3rd Party / Self-Hosted Model Configuration
 # ──────────────────────────────────────────────
-# Use per-agent env vars for different providers:
+# Env var naming: {PROVIDER}_ANT_{URL|MODEL|KEY} for Anthropic-compatible,
+#                 {PROVIDER}_OAI_{URL|MODEL|KEY} for OpenAI-compatible.
+#
+# Claude with 3rd party (Anthropic-compatible):
 #   - name: DEV
 #     type: claude
 #     env:
-#       ANTHROPIC_BASE_URL: https://openrouter.ai/api/v1
-#       ANTHROPIC_MODEL: anthropic/claude-sonnet-4-20250514
+#       ANTHROPIC_BASE_URL: ${OPENROUTER_ANT_URL}
+#       ANTHROPIC_MODEL: ${OPENROUTER_ANT_MODEL}
+#
+# Codex with 3rd party (OpenAI-compatible, requires codex v0.80.0):
+#   - name: DEV
+#     type: codex
+#     env:
+#       CODEX_MODEL: ${QW_OAI_MODEL}
+#       CODEX_PROVIDER: dashscope
+#       CODEX_BASE_URL: ${QW_OAI_URL}
+#       CODEX_WIRE_API: chat
+#       OPENAI_API_KEY: ${QW_OAI_KEY}
 #
 # WARNING: Do NOT put API keys in this file if it's committed to git.
-# Set API keys in your shell environment instead.
+# Set API keys in .crew/.env or your shell environment instead.
 EOF
   log_ok "Created $CONFIG_FILE"
 

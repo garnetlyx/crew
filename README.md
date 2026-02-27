@@ -173,7 +173,7 @@ crew uses a plugin system for CLI abstraction. Each supported CLI has a plugin t
 | Plugin | CLI | Install |
 |--------|-----|---------|
 | `claude` | Claude Code | `npm install -g @anthropic-ai/claude-code` |
-| `codex` | OpenAI Codex | `npm install -g @openai/codex` |
+| `codex` | OpenAI Codex | `npm install -g @openai/codex@0.80.0` (see [Codex notes](#codex-with-3rd-party-models)) |
 | `opencode` | OpenCode | `go install github.com/opencode-ai/opencode@latest` |
 | `gemini` | Google Gemini | `pip install google-gemini-cli` |
 | `aider` | Aider | `pip install aider-chat` |
@@ -233,14 +233,57 @@ agents:
 | OpenRouter | `https://openrouter.ai/api/v1` |
 | Self-hosted | `http://localhost:8080/v1` |
 
+### Codex with 3rd Party Models
+
+> **IMPORTANT**: Codex CLI v0.105.0+ dropped `wire_api = "chat"` support, which is required by most third-party OpenAI-compatible providers. **Use v0.80.0** when working with non-OpenAI models:
+> ```bash
+> npm install -g @openai/codex@0.80.0
+> ```
+
+The `codex` plugin supports `CODEX_*` environment variables for configuring custom model providers. These are automatically translated into `-c` flags passed to the codex CLI:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `CODEX_MODEL` | Model name | `qwen3.5-plus` |
+| `CODEX_PROVIDER` | Provider identifier | `dashscope` |
+| `CODEX_PROVIDER_NAME` | Human-readable name (defaults to `CODEX_PROVIDER`) | `DashScope` |
+| `CODEX_BASE_URL` | Provider API base URL | `https://coding.dashscope.aliyuncs.com/v1` |
+| `CODEX_WIRE_API` | Wire protocol: `chat` or `responses` | `chat` |
+| `CODEX_API_KEY_ENV` | Env var name holding the API key (default: `OPENAI_API_KEY`) | `OPENAI_API_KEY` |
+
+Example `crew.yaml` for codex with DashScope:
+
+```yaml
+agents:
+  - name: DEV
+    type: codex
+    prompt: prompts/dev.md
+    env:
+      CODEX_MODEL: qwen3.5-plus
+      CODEX_PROVIDER: dashscope
+      CODEX_BASE_URL: https://coding.dashscope.aliyuncs.com/v1
+      CODEX_WIRE_API: chat
+      OPENAI_API_KEY: ${QWC_API_KEY}   # set in .crew/.env
+    fallback:
+      - label: minimax
+        type: codex
+        env:
+          CODEX_MODEL: MiniMax-M2.5
+          CODEX_PROVIDER: minimax
+          CODEX_BASE_URL: https://api.minimaxi.com/v1
+          CODEX_WIRE_API: chat
+          OPENAI_API_KEY: ${MINIMAX_API_KEY}
+```
+
 ### API Key Handling
 
 > **WARNING**: Never put API keys in `crew.yaml` if it's committed to git.
 
-Set `ANTHROPIC_API_KEY` in your shell environment instead:
+Set API keys in `.crew/.env` (git-ignored) or your shell environment:
 
 ```bash
 export ANTHROPIC_API_KEY="sk-..."
+export OPENAI_API_KEY="sk-..."
 ```
 
 ## Fallback Mechanism
@@ -323,6 +366,10 @@ agents:
 | `ANTHROPIC_MODEL` | Override model for Claude CLI |
 | `ANTHROPIC_API_KEY` | API key for Claude CLI (set in shell, not config) |
 | `OPENAI_API_KEY` | API key for Codex CLI (set in shell, not config) |
+| `CODEX_MODEL` | Model name for Codex custom provider |
+| `CODEX_PROVIDER` | Codex provider identifier (triggers `-c` flag injection) |
+| `CODEX_BASE_URL` | Codex custom provider API base URL |
+| `CODEX_WIRE_API` | Codex wire protocol: `chat` or `responses` |
 | `GEMINI_API_KEY` | API key for Gemini CLI (set in shell, not config) |
 | `DEBUG` | Set to `1` for verbose output |
 

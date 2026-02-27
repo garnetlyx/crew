@@ -18,9 +18,9 @@ agents:
       - e2e/
       - server/src/__tests__/
     env:
-      ANTHROPIC_BASE_URL: ${1ST_BASE_URL}
-      ANTHROPIC_MODEL: ${1ST_MODEL}
-      ANTHROPIC_API_KEY: ${1ST_API_KEY}
+      ANTHROPIC_BASE_URL: ${1ST_ANT_URL}
+      ANTHROPIC_MODEL: ${1ST_ANT_MODEL}
+      ANTHROPIC_API_KEY: ${1ST_ANT_KEY}
     # Model fallback chain (tried in order when max_restarts exhausted):
     # All entries go under ONE fallback key — do NOT repeat the key.
     # Example Strategy: Switch models/providers while keeping type: claude
@@ -29,16 +29,16 @@ agents:
         type: claude
         max_restarts: 3
         env:
-          ANTHROPIC_BASE_URL: https://api.deepseek.com/v1
-          ANTHROPIC_MODEL: deepseek-coder
-          ANTHROPIC_API_KEY: ${DEEPSEEK_API_KEY}
+          ANTHROPIC_BASE_URL: ${DEEPSEEK_ANT_URL}
+          ANTHROPIC_MODEL: ${DEEPSEEK_ANT_MODEL}
+          ANTHROPIC_API_KEY: ${DEEPSEEK_ANT_KEY}
       - label: third_party_2
         type: claude
         max_restarts: 3
         env:
-          ANTHROPIC_BASE_URL: https://api.together.xyz/v1
-          ANTHROPIC_MODEL: meta-llama/Llama-3-70b-chat-hf
-          ANTHROPIC_API_KEY: ${TOGETHER_API_KEY}
+          ANTHROPIC_BASE_URL: ${TOGETHER_ANT_URL}
+          ANTHROPIC_MODEL: ${TOGETHER_ANT_MODEL}
+          ANTHROPIC_API_KEY: ${TOGETHER_ANT_KEY}
 
   - name: DEV
     icon: 🔵
@@ -50,6 +50,13 @@ agents:
     working_dirs:
       - server/src/
       - client/src/
+    # Example: Codex with 3rd party model (requires codex v0.80.0)
+    env:
+      CODEX_MODEL: ${QW_OAI_MODEL}
+      CODEX_PROVIDER: dashscope
+      CODEX_BASE_URL: ${QW_OAI_URL}
+      CODEX_WIRE_API: chat
+      OPENAI_API_KEY: ${QW_OAI_KEY}
     # Example Strategy: Switch underlying tool CLI entirely
     fallback:
       - label: use-gemini
