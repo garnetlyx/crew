@@ -483,7 +483,7 @@ design_status() {
 
   # History
   local history_count
-  history_count=$(ls "$design_dir/history/"*.md 2>/dev/null | wc -l)
+  history_count=$(find "$design_dir/history/" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l)
   echo ""
   echo "History: $history_count files"
 

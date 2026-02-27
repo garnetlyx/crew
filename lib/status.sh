@@ -141,7 +141,7 @@ tail_agent_log() {
   echo "File: $log_file"
   separator "-" 50
 
-  tail -f "$log_file"
+  tail -n "$lines" -f "$log_file"
 }
 
 # Show specific agent info

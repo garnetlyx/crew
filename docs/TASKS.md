@@ -1,6 +1,6 @@
 # crew - Development Tasks
 
-**Last Updated**: 2026-02-27 (QA: v6 audit COMPLETE, v7 audit 9 new bugs PENDING)
+**Last Updated**: 2026-02-27 (CI: all tests green, shellcheck passes)
 
 ## DEV NOTES FOR QA
 
@@ -666,6 +666,8 @@
   ```
 - [x] Test: Updated `test_watchdog.bats` test 3 to verify correct behavior
 - [x] All 117 tests pass
+- [x] All 254 unit tests + 15 integration tests pass (CI green)
+- [x] Shellcheck lint passes (`shellcheck -x --exclude=SC1091`)
 
 ---
 

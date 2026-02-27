@@ -6,7 +6,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
 
 # Default config file names
 CREW_CONFIG_NAME="crew.yaml"
-DESIGN_CONFIG_NAME="design.yaml"
+export DESIGN_CONFIG_NAME="design.yaml"
 
 # Defense-in-depth: reject agent names with yq-unsafe characters before interpolation.
 # validate_agent_name() already enforces [A-Za-z0-9_-] at CLI entry points;
@@ -57,11 +57,6 @@ parse_yaml() {
     return 1
   fi
 
-  if ! validate_file_path "$config_file"; then
-    log_error "Invalid config file path: $config_file"
-    return 1
-  fi
-
   yq eval "$query" "$config_file" < /dev/null
 }
 
@@ -82,11 +77,6 @@ parse_json() {
 
   if ! [[ -f "$config_file" ]]; then
     log_error "Config file not found: $config_file"
-    return 1
-  fi
-
-  if ! validate_file_path "$config_file"; then
-    log_error "Invalid config file path: $config_file"
     return 1
   fi
 

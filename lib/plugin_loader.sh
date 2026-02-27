@@ -90,6 +90,7 @@ load_plugin() {
       fi
 
       log_debug "Loading plugin: $name from $plugin_file"
+      # shellcheck source=/dev/null
       source "$plugin_file"
 
       # Validate required functions

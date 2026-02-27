@@ -120,7 +120,7 @@ EOF
   escaped=$(echo "$project_name" | sed 's/[&/\]/\\&/g')
 
   # The escaping should handle & correctly (sed replacement character)
-  if [[ "$escaped" != "test\&project/path" ]]; then
+  if [[ "$escaped" != 'test\&project\/path' ]]; then
     echo "FAIL: Project name not properly escaped for sed (BUG-QA-112 may exist)"
     false
   fi
