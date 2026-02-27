@@ -155,7 +155,7 @@ crew solves these by automating agent coordination and enabling AI-to-AI feedbac
 ### 5.3 Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/crew ~/dev/crew
+git clone https://github.com/garnetlyx/crew ~/dev/crew
 cd ~/dev/crew
 ./install.sh
 ```
