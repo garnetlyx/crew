@@ -347,6 +347,16 @@ export ANTHROPIC_API_KEY="sk-..."
 export OPENAI_API_KEY="sk-..."
 ```
 
+### Shared Environment Configuration
+
+Multiple projects can share a single environment configuration. `crew` searches for `.env` files in the following order:
+
+1.  **Global**: `~/.crew/.env`
+2.  **Parent**: `.crew/.env` or `.design/.env` in any parent directory (recursive)
+3.  **Local**: `.crew/.env` or `.design/.env` in the current project
+
+Values are merged, with local project settings taking the highest priority.
+
 ## Fallback Mechanism
 
 When an agent fails repeatedly (reaching `max_restarts`), it automatically falls back to the next level in its fallback chain. Each level can change the CLI type, env vars, or both.

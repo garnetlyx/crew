@@ -188,7 +188,11 @@ EOF
   chmod 600 "$tmp_file"
 
   local perms
-  perms=$(stat -f "%Lp" "$tmp_file" 2>/dev/null || stat -c "%a" "$tmp_file" 2>/dev/null)
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    perms=$(stat -f "%Lp" "$tmp_file")
+  else
+    perms=$(stat -c "%a" "$tmp_file")
+  fi
 
   # Should be 600 (owner read/write only)
   [ "$perms" = "600" ]

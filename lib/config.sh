@@ -45,6 +45,51 @@ find_config() {
   return 1
 }
 
+# Find all relevant .env files in parent or global directories.
+# Returns list of absolute paths, from least-specific (global) to most-specific (local).
+# Search order:
+# 1. ~/.crew/.env
+# 2. Parent .crew/.env or .design/.env (bottom-up discovery, reversed at output)
+# 3. Local .crew/.env or .design/.env
+find_env_files() {
+  local files=()
+  local dir="$PWD"
+
+  # 1. Parent/Local search
+  local parent_files=()
+  while [[ "$dir" != "/" ]]; do
+    for subdir in .crew .design; do
+      if [[ -f "$dir/$subdir/.env" ]]; then
+        parent_files+=("$dir/$subdir/.env")
+      fi
+    done
+    dir="$(dirname "$dir")"
+  done
+  
+  # Reverse parent_files so deepest (local) is last
+  for (( i=${#parent_files[@]}-1; i>=0; i-- )); do
+    files+=("${parent_files[i]}")
+  done
+
+  # 2. Global fallback (lowest priority, prepend if exists)
+  if [[ -f "$HOME/.crew/.env" ]]; then
+    # Only add if not already in the list (e.g. if HOME is a parent of PWD)
+    local found=false
+    for f in "${files[@]}"; do
+      if [[ "$f" == "$HOME/.crew/.env" ]]; then
+        found=true; break
+      fi
+    done
+    if [[ "$found" == "false" ]]; then
+      files=("$HOME/.crew/.env" "${files[@]}")
+    fi
+  fi
+
+  for f in "${files[@]}"; do
+    echo "$f"
+  done
+}
+
 # Parse YAML config using yq (required dependency)
 parse_yaml() {
   local query="$1"

@@ -153,7 +153,11 @@ EOF
   echo "QA|1" > "$TEST_DIR/.crew/run/QA.fallback"
 
   local perms
-  perms=$(stat -f "%Lp" "$TEST_DIR/.crew/run/QA.fallback" 2>/dev/null || stat -c "%a" "$TEST_DIR/.crew/run/QA.fallback" 2>/dev/null)
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    perms=$(stat -f "%Lp" "$TEST_DIR/.crew/run/QA.fallback")
+  else
+    perms=$(stat -c "%a" "$TEST_DIR/.crew/run/QA.fallback")
+  fi
 
   # Documents current permission level
   [[ "$perms" == "644" ]] || [[ "$perms" == "600" ]]

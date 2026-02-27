@@ -273,7 +273,11 @@ EOF
 
   # Verify proper permissions are set
   local perms
-  perms=$(stat -f "%Lp" "$tmp_file" 2>/dev/null || stat -c "%a" "$tmp_file" 2>/dev/null)
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    perms=$(stat -f "%Lp" "$tmp_file")
+  else
+    perms=$(stat -c "%a" "$tmp_file")
+  fi
 
   # Should be readable only by owner (600)
   [ "$perms" = "600" ] || [ "$perms" = "644" ]  # 644 is default, 600 is ideal

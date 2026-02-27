@@ -115,9 +115,9 @@ EOF
   # This simulates what happens when agent is detected as stuck
   run bash -c "
     set -e
-    source /Users/gl/dev/crew/lib/utils.sh
-    source /Users/gl/dev/crew/lib/config.sh
-    source /Users/gl/dev/crew/lib/watchdog.sh 2>/dev/null
+    source $PROJECT_ROOT/lib/utils.sh
+    source $PROJECT_ROOT/lib/config.sh
+    source $PROJECT_ROOT/lib/watchdog.sh 2>/dev/null
     _handle_stuck_agent TEST notify .crew/crew.yaml
   "
 
@@ -142,14 +142,14 @@ EOF
   # call validate_file_path before using working_dir.
 
   # Load utils for validate_file_path
-  source /Users/gl/dev/crew/lib/utils.sh
+  source $PROJECT_ROOT/lib/utils.sh
 
   # Verify that validate_file_path correctly rejects path traversal
   run validate_file_path "../../../etc"
   [[ "$status" -eq 1 ]]
 
   # Verify the fix: validate_file_path should be called in plugin_loader.sh
-  if grep -q "validate_file_path.*working_dir" /Users/gl/dev/crew/lib/plugin_loader.sh 2>/dev/null; then
+  if grep -q "validate_file_path.*working_dir" $PROJECT_ROOT/lib/plugin_loader.sh 2>/dev/null; then
     # BUG FIXED: Validation is present - test passes
     :
   else
@@ -182,7 +182,7 @@ EOF
 
   run _codex_escape_toml $'model\nnew_section = "injected"'
   [ "$status" -eq 0 ]
-  [[ "$output" == 'model\nnew_section = "injected"' ]]
+  [[ "$output" == 'model\nnew_section = \"injected\"' ]]
   # Escaped output should NOT contain a literal newline
   [[ "$output" != *$'\n'* ]]
 }
@@ -250,7 +250,7 @@ EOF
 
 @test "SECURITY: plugin loader should reject world-writable plugin files" {
   # Verify the permission check exists in plugin_loader.sh
-  if grep -q "world-writable" /Users/gl/dev/crew/lib/plugin_loader.sh 2>/dev/null; then
+  if grep -q "world-writable" $PROJECT_ROOT/lib/plugin_loader.sh 2>/dev/null; then
     # Fix is in place
     :
   else
@@ -285,7 +285,7 @@ EOF
 
 @test "SECURITY: cost.sh should check for bc dependency" {
   # Verify that cost.sh uses bc without checking if it's installed
-  if grep -q "command_exists bc\|which bc" /Users/gl/dev/crew/lib/cost.sh 2>/dev/null; then
+  if grep -q "command_exists bc\|which bc" $PROJECT_ROOT/lib/cost.sh 2>/dev/null; then
     # Fix is in place - bc dependency is checked
     :
   else
@@ -305,7 +305,7 @@ EOF
 @test "SECURITY: --max-iter should reject invalid values" {
   # The --max-iter flag should only accept positive integers >= 1
   # Check if validation exists in design.sh
-  if grep -q "max-iter must be a positive integer" /Users/gl/dev/crew/design.sh 2>/dev/null; then
+  if grep -q "max-iter must be a positive integer" $PROJECT_ROOT/design.sh 2>/dev/null; then
     # Fix is in place
     :
   else
@@ -326,7 +326,7 @@ EOF
   # This test checks if validation is present
 
   # Check if CREW_AGENT is validated before use
-  if grep -q "Invalid CREW_AGENT value" /Users/gl/dev/crew/lib/config.sh 2>/dev/null; then
+  if grep -q "Invalid CREW_AGENT value" $PROJECT_ROOT/lib/config.sh 2>/dev/null; then
     # Fix is in place
     :
   else
@@ -347,7 +347,7 @@ EOF
   # This test checks if trap cleanup is present
 
   # Check if trap for cleanup exists
-  if grep -qE "trap.*rm.*out_file.*EXIT.*INT.*TERM" /Users/gl/dev/crew/plugins/codex.sh 2>/dev/null; then
+  if grep -qE "trap.*rm.*out_file.*EXIT.*INT.*TERM" $PROJECT_ROOT/plugins/codex.sh 2>/dev/null; then
     # Fix is in place
     :
   else
