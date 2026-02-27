@@ -195,38 +195,43 @@ export_agent_env() {
   local name="$1"
   local config_file="$2"
 
-  # Load .crew/.env if it exists
+  # Load relevant .env files (global -> parent -> local)
   # BUG-QA-100: Safe line-by-line parser instead of `source` to prevent command injection.
   # Only accepts KEY=VALUE lines where KEY is a valid env var name and VALUE does not
   # contain command substitution ($(), backticks), function definitions, or semicolons.
-  if [[ -f ".crew/.env" ]]; then
-    local _env_line _env_key _env_val
-    while IFS= read -r _env_line || [[ -n "$_env_line" ]]; do
-      # Skip comments and blank lines
-      [[ -z "$_env_line" || "$_env_line" == \#* ]] && continue
-      # Must be KEY=VALUE format
-      if [[ ! "$_env_line" == *=* ]]; then
-        log_warn "Skipping invalid .env line (no =): ${_env_line:0:40}"
-        continue
-      fi
-      _env_key="${_env_line%%=*}"
-      _env_val="${_env_line#*=}"
-      # Strip optional quotes from value
-      if [[ "$_env_val" == \"*\" || "$_env_val" == \'*\' ]]; then
-        _env_val="${_env_val:1:${#_env_val}-2}"
-      fi
-      # Validate key is a valid env var name
-      if [[ ! "$_env_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-        log_warn "Skipping invalid .env key: $_env_key"
-        continue
-      fi
-      # Reject values with command substitution, backticks, or shell operators
-      if printf '%s' "$_env_val" | grep -qE '\$\(|`|;|\|' 2>/dev/null; then
-        log_warn "Skipping unsafe .env value for $_env_key: contains shell operators"
-        continue
-      fi
-      export "$_env_key=$_env_val"
-    done < ".crew/.env"
+  local env_files
+  env_files=$(find_env_files)
+  
+  if [[ -n "$env_files" ]]; then
+    while IFS= read -r env_path; do
+      [[ -z "$env_path" || ! -f "$env_path" ]] && continue
+      
+      local _env_line _env_key _env_val
+      while IFS= read -r _env_line || [[ -n "$_env_line" ]]; do
+        # Skip comments and blank lines
+        [[ -z "$_env_line" || "$_env_line" == \#* ]] && continue
+        # Must be KEY=VALUE format
+        if [[ ! "$_env_line" == *=* ]]; then
+          continue
+        fi
+        _env_key="${_env_line%%=*}"
+        _env_val="${_env_line#*=}"
+        # Strip optional quotes from value
+        if [[ "$_env_val" == \"*\" || "$_env_val" == \'*\' ]]; then
+          _env_val="${_env_val:1:${#_env_val}-2}"
+        fi
+        # Validate key is a valid env var name
+        if [[ ! "$_env_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+          continue
+        fi
+        # Reject values with command substitution, backticks, or shell operators
+        if printf '%s' "$_env_val" | grep -qE '\$\(|`|;|\|' 2>/dev/null; then
+          log_warn "Skipping unsafe .env value for $_env_key: contains shell operators"
+          continue
+        fi
+        export "$_env_key=$_env_val"
+      done < "$env_path"
+    done <<< "$env_files"
   fi
 
   [[ -z "$config_file" || ! -f "$config_file" ]] && return 0
@@ -962,7 +967,7 @@ stop_all_agents() {
 
   # Clean up stale lock dirs
   for lock_dir in "$crew_dir/run"/*.lock; do
-    [[ -d "$lock_dir" ]] && rmdir "$lock_dir" 2>/dev/null || true
+    if [[ -d "$lock_dir" ]]; then rmdir "$lock_dir" 2>/dev/null || true; fi
   done
 }
 

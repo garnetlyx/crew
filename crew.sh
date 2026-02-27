@@ -435,7 +435,7 @@ crew_logs() {
 
 # List available plugins
 crew_plugins() {
-  list_plugins
+  list_plugins "crew"
 }
 
 # Edit agent prompt

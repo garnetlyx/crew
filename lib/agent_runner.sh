@@ -137,5 +137,5 @@ check_agent() {
 
 # List available agents (delegates to plugin system)
 list_agents() {
-  list_plugins
+  list_plugins "crew"
 }
