@@ -5,7 +5,7 @@ Multi-agent orchestration tool for AI-assisted development.
 ## Quick Reference
 
 ```bash
-# Design Mode - Cross-review loop
+# Design Mode - Design-review loop
 design init "Your idea description"
 design review
 design status
@@ -24,7 +24,7 @@ crew logs <AGENT>
 ```
 crew/
 ├── crew.sh              # Parallel agent orchestration entry
-├── design.sh            # Cross-review loop entry
+├── design.sh            # Design-review loop entry
 ├── install.sh           # Installation script
 ├── plugins/             # Built-in CLI plugins
 │   ├── claude.sh
@@ -36,7 +36,7 @@ crew/
 │   ├── utils.sh         # Logging, colors, helpers
 │   ├── config.sh        # YAML parsing (yq/python fallback)
 │   ├── plugin_loader.sh # CLI plugin discovery and dispatch
-│   ├── orchestrator.sh  # Cross-review loop engine
+│   ├── orchestrator.sh  # Design-review loop engine
 │   ├── watchdog.sh      # Agent health monitoring
 │   ├── agent_runner.sh  # Design mode agent interface
 │   └── status.sh        # Status display, monitoring
@@ -45,7 +45,7 @@ crew/
 │   │   ├── qa.md            # QA agent prompt
 │   │   ├── dev.md           # DEV agent prompt
 │   │   └── janitor.md       # JANITOR agent prompt
-│   └── cross-review/
+│   └── design-review/
 │       ├── plan_writer.md
 │       └── reviewer.md
 └── docs/
@@ -58,7 +58,7 @@ crew/
 
 ## Architecture Overview
 
-### Design Mode (Cross-Review Loop)
+### Design Mode (Design-Review Loop)
 
 ```
 ┌──────────────┐    trigger     ┌──────────────┐
@@ -93,7 +93,7 @@ Termination conditions:
 
 | Module | Purpose |
 |--------|---------|
-| `orchestrator.sh` | Cross-review loop logic, termination detection |
+| `orchestrator.sh` | Design-review loop logic, termination detection |
 | `watchdog.sh` | Start/stop agents, PID management, health checks |
 | `plugin_loader.sh` | Plugin discovery, loading, validation, dispatch |
 | `agent_runner.sh` | Design mode agent interface (delegates to plugins) |

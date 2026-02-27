@@ -105,7 +105,7 @@ Key modules:
 - `lib/utils.sh` - Logging, validation, helpers
 - `lib/config.sh` - YAML parsing (yq/python fallback)
 - `lib/watchdog.sh` - Agent lifecycle, PID management, health monitoring
-- `lib/orchestrator.sh` - Cross-review loop engine
+- `lib/orchestrator.sh` - Design-review loop engine
 - `lib/agent_runner.sh` - CLI abstraction for different AI agents
 - `lib/status.sh` - Status display and monitoring
 

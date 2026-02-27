@@ -21,7 +21,7 @@ crew is a Bash-based multi-agent orchestration system with two operational modes
            │   Design Mode    │                        │    Crew Mode     │
            │  (design.sh)     │                        │   (crew.sh)      │
            │                  │                        │                  │
-           │  Cross-Review    │                        │  Parallel Agents │
+           │  Design-Review    │                        │  Parallel Agents │
            │  Writer ⇄ Review │                        │  + Watchdog      │
            └──────────────────┘                        └──────────────────┘
 ```
@@ -64,7 +64,7 @@ lib/
 │   Used by: orchestrator.sh, watchdog.sh, status.sh               │
 ├──────────────────────────────────────────────────────────────────┤
 ├── orchestrator.sh   ─────────────────────────────────────────────┐
-│   Cross-review engine: loop control, termination detection       │
+│   Design-review engine: loop control, termination detection       │
 │   Functions: cross_review_loop, parse_review_decision,           │
 │              detect_conflict, design_init, design_status         │
 │   Used by: design.sh                                             │
@@ -126,7 +126,7 @@ lib/
 
 ## 3. Data Flow
 
-### 3.1 Design Mode: Cross-Review Loop
+### 3.1 Design Mode: Design-Review Loop
 
 ```
                               design init "idea"
@@ -142,7 +142,7 @@ lib/
                                      │
                                      ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│                        Cross-Review Loop                            │
+│                        Design-Review Loop                            │
 │                                                                     │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐           │
 │  │   Inject    │     │ Plan Writer │     │   Output    │           │
@@ -261,7 +261,7 @@ lib/
 │   │   ├── qa.md              # QA agent prompt
 │   │   ├── dev.md             # DEV agent prompt
 │   │   └── janitor.md         # JANITOR agent prompt
-│   └── cross-review/
+│   └── design-review/
 │       ├── plan_writer.md     # Default Writer prompt
 │       └── reviewer.md        # Default Reviewer prompt
 └── docs/

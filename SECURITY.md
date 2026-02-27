@@ -48,7 +48,7 @@ AI agents are susceptible to prompt injection. Be aware that:
 
 1. Any file an agent reads could contain adversarial instructions
 2. Agent prompts in `.crew/prompts/` or `.design/prompts/` define agent behavior
-3. In cross-review mode, agents read each other's output, creating a potential injection chain
+3. In design-review mode, agents read each other's output, creating a potential injection chain
 
 Mitigations:
 - Review agent prompts before use

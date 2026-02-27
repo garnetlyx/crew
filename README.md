@@ -13,7 +13,7 @@
 
 | Command | Mode | Use Case |
 |---------|------|----------|
-| `design` | Cross-Review | Refine ideas into polished design docs |
+| `design` | Design-Review | Refine ideas into polished design docs |
 | `crew` | Parallel Agents | Run multiple AI agents for debugging/optimization |
 
 ## Installation
@@ -53,7 +53,7 @@ Before running `crew start`, verify the following:
 
 > **Tip**: Run `crew validate` to check config syntax before starting agents.
 
-## `design` - Cross-Review Mode
+## `design` - Design-Review Mode
 
 Turn ideas into refined design documents through automated Writer ⇄ Reviewer loops.
 
@@ -61,7 +61,7 @@ Turn ideas into refined design documents through automated Writer ⇄ Reviewer l
 # Initialize with your idea
 design init "A CLI tool for managing container deployments"
 
-# Start cross-review loop
+# Start design-review loop
 design review
 
 # Check status

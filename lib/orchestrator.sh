@@ -1,5 +1,5 @@
 #!/bin/bash
-# crew/lib/orchestrator.sh - Cross-review orchestration engine
+# crew/lib/orchestrator.sh - Design-review orchestration engine
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
@@ -11,7 +11,7 @@ EXIT_PASS=0
 EXIT_MAX_ITER=1
 EXIT_STALE=2
 
-# Cross-review loop
+# Design-review loop
 # Usage: cross_review_loop [max_iterations]
 cross_review_loop() {
   local design_dir=".design"
@@ -58,7 +58,7 @@ cross_review_loop() {
   local stale_count=0
   local prev_plan_hash=""
   
-  header "Cross-Review Loop"
+  header "Design-Review Loop"
   log_info "Writer Agent: $writer_agent"
   log_info "Reviewer Agent: $reviewer_agent"
   log_info "Max iterations: $max_iter"
@@ -247,7 +247,7 @@ design_init() {
   agent_type=$(get_agent_type "")
   
   cat > "$design_dir/design.yaml" << EOF
-# Cross-Review Design Session
+# Design-Review Design Session
 project: $(basename "$PWD")
 writer_agent: $agent_type
 reviewer_agent: $agent_type
@@ -282,7 +282,7 @@ EOF
   
   echo ""
   log_info "Design session initialized!"
-  log_info "Run 'design review' to start cross-review loop"
+  log_info "Run 'design review' to start design-review loop"
 }
 
 # Show design status

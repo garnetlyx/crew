@@ -10,7 +10,7 @@
 
 ### 1.1 Vision
 
-crew is a multi-agent orchestration tool that enables developers to leverage multiple AI assistants working in concert. It provides two complementary modes: iterative design refinement through cross-review loops, and parallel agent execution for continuous codebase improvement.
+crew is a multi-agent orchestration tool that enables developers to leverage multiple AI assistants working in concert. It provides two complementary modes: iterative design refinement through design-review loops, and parallel agent execution for continuous codebase improvement.
 
 ### 1.2 Problem Statement
 
@@ -98,7 +98,7 @@ crew solves these by automating agent coordination and enabling AI-to-AI feedbac
 
 ### 4.1 Implemented (v0.1.0)
 
-- [x] **Design Mode**: Cross-review loop (`design init`, `design review`, `design status`)
+- [x] **Design Mode**: Design-review loop (`design init`, `design review`, `design status`)
 - [x] **Crew Mode**: Parallel agent orchestration (`crew init`, `crew start`, `crew stop`)
 - [x] **Multi-agent support**: claude, codex, opencode, gemini, aider CLI integration
 - [x] **CLI plugin system**: Extensible type-based CLI registration with plugin discovery

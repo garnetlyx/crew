@@ -1,9 +1,9 @@
 #!/bin/bash
-# design - Cross-review loop for design doc refinement
+# design - Design-review loop for design doc refinement
 #
 # Usage:
 #   design init <idea>     Initialize new design session
-#   design review          Start/continue cross-review loop
+#   design review          Start/continue design-review loop
 #   design status          Show current review status
 #   design reset           Reset to initial state
 
@@ -25,14 +25,14 @@ VERSION="0.2.0"
 
 usage() {
   cat << EOF
-${BOLD}design${NC} - Cross-review loop for design doc refinement
+${BOLD}design${NC} - Design-review loop for design doc refinement
 
 ${BOLD}USAGE${NC}
   design <command> [options]
 
 ${BOLD}COMMANDS${NC}
   init <idea|file> Initialize new design session with idea or file
-  review           Start or continue cross-review loop
+  review           Start or continue design-review loop
   status           Show current review status
   reset            Reset session (keeps idea.txt)
   help             Show this help message
@@ -49,7 +49,7 @@ ${BOLD}EXAMPLES${NC}
   # Start from a file
   design init brainstorm.md
 
-  # Run cross-review loop
+  # Run design-review loop
   design review
 
   # Check status
