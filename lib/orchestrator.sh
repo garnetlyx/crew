@@ -101,6 +101,13 @@ cross_review_loop() {
       return 1
     fi
     
+    # Ensure Plan Writer actually created the file
+    if [[ ! -f "$design_dir/plan.md" ]]; then
+      log_error "Plan Writer completed but $design_dir/plan.md was not created."
+      log_info "The agent might have outputted the plan as text instead of saving it to a file."
+      return 1
+    fi
+    
     # Check for stale (no substantive changes)
     local curr_hash
     curr_hash=$(file_hash "$design_dir/plan.md")

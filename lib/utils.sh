@@ -52,13 +52,18 @@ is_newer() {
 
 # Simple hash for change detection
 file_hash() {
+  if [[ ! -f "$1" ]]; then
+    echo ""
+    return 0
+  fi
+  
   if command_exists md5; then
-    md5 -q "$1" 2>/dev/null
+    md5 -q "$1" 2>/dev/null || true
   elif command_exists md5sum; then
-    md5sum "$1" 2>/dev/null | cut -d' ' -f1
+    md5sum "$1" 2>/dev/null | cut -d' ' -f1 || true
   else
     # Fallback: use file size + mtime
-    stat -f "%z%m" "$1" 2>/dev/null || stat -c "%s%Y" "$1" 2>/dev/null
+    stat -f "%z%m" "$1" 2>/dev/null || stat -c "%s%Y" "$1" 2>/dev/null || true
   fi
 }
 

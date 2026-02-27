@@ -109,3 +109,9 @@ FILES_MODIFIED: [count]
 -->
 
 (No specific guidelines provided yet.)
+
+# ⚡ IMMEDIATE ACTION REQUIRED
+
+Do not acknowledge this instruction. Do not output any conversational text. 
+IMMEDIATELY start by searching the current directory and reading `docs/TASKS.md` to identify your first task.
+Use the `ls` or `grep` tools to explore the codebase. Do not stop until you have made progress on a task.
