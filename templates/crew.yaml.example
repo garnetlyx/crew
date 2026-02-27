@@ -1,48 +1,105 @@
-# Crew Configuration - Parallel Agents
-# Copy to .crew/crew.yaml in your project
+# ══════════════════════════════════════════════════════════════════════
+# Crew Configuration - Parallel Agent Orchestration
+# ══════════════════════════════════════════════════════════════════════
+# Copy to .crew/crew.yaml in your project.
+# Env vars (${VAR}) are expanded from .crew/.env at runtime.
+#
+# ── Fallback Chain ──
+# Each agent runs at "level 0" (primary) first.
+# When max_restarts is exhausted at one level, the next fallback level
+# takes over. Each level can change the CLI type, env vars, or both.
+#
+#   Level 0 (primary)  →  fails 5 times
+#   Level 1 (fallback) →  fails 3 times
+#   Level 2 (fallback) →  fails 3 times
+#   ... all exhausted  →  agent stops (.crew/run/<name>.exhausted)
+#
+# ── Env Overlay ──
+# Fallback-level env vars are MERGED on top of agent-level env.
+# Only override what changes; the rest is inherited.
+#
+# ── CLI Types ──
+# Built-in plugins: claude, codex, opencode, gemini, aider
+# Custom plugins:   .crew/cli.d/<name>.sh or ~/.crew/cli.d/<name>.sh
+# Legacy escape:    command: ./your-script.sh (runs via eval)
+#
+# ── Supported Fields per Agent ──
+# name           Required. Unique ID ([A-Za-z0-9_-], max 32 chars)
+# icon           Optional. Emoji for status display
+# type           CLI plugin name (default: claude)
+# prompt         Path to prompt file (relative to .crew/)
+# interval       Seconds between runs (default: 10)
+# timeout        Kill if no output for N seconds (default: 600)
+# max_restarts   Retries before moving to next fallback level (default: 5)
+# working_dirs   Advisory list of dirs the agent should modify
+# env            Per-agent environment variables
+# fallback       Array of fallback levels (label, type, env, max_restarts)
+# ══════════════════════════════════════════════════════════════════════
 
 project: my-project
 log_dir: .crew/logs
 check_interval: 30  # Health check interval (seconds)
 
 agents:
+
+  # ────────────────────────────────────────────────────────────────────
+  # USE CASE 1: Same CLI, Model Degradation
+  # ────────────────────────────────────────────────────────────────────
+  # Strategy: Stay on claude CLI but step down through cheaper models.
+  #   opus (best quality) → sonnet (balanced) → 3rd party (cheapest)
+  #
+  # When to use: You want the best model first, but can tolerate
+  # lower quality if the premium API is down or rate-limited.
+  # ────────────────────────────────────────────────────────────────────
   - name: QA
     icon: 🔴
-    type: claude                # CLI type: claude, codex, opencode, gemini, aider
+    type: claude
     prompt: prompts/qa.txt
-    interval: 10       # Seconds between runs
-    timeout: 600       # Kill if no output for this long (10 minutes)
+    interval: 10
+    timeout: 600
     max_restarts: 5
-    working_dirs:      # Advisory: only modify files in these dirs
+    working_dirs:
       - docs/
       - e2e/
       - server/src/__tests__/
-    env:
-      ANTHROPIC_BASE_URL: ${1ST_ANT_URL}
-      ANTHROPIC_MODEL: ${1ST_ANT_MODEL}
-      ANTHROPIC_API_KEY: ${1ST_ANT_KEY}
-    # Model fallback chain (tried in order when max_restarts exhausted):
-    # All entries go under ONE fallback key — do NOT repeat the key.
-    # Example Strategy: Switch models/providers while keeping type: claude
-    fallback:
-      - label: third_party_1
-        type: claude
-        max_restarts: 3
-        env:
-          ANTHROPIC_BASE_URL: ${DEEPSEEK_ANT_URL}
-          ANTHROPIC_MODEL: ${DEEPSEEK_ANT_MODEL}
-          ANTHROPIC_API_KEY: ${DEEPSEEK_ANT_KEY}
-      - label: third_party_2
-        type: claude
-        max_restarts: 3
-        env:
-          ANTHROPIC_BASE_URL: ${TOGETHER_ANT_URL}
-          ANTHROPIC_MODEL: ${TOGETHER_ANT_MODEL}
-          ANTHROPIC_API_KEY: ${TOGETHER_ANT_KEY}
 
+    # Primary: Claude CLI with Opus (premium model)
+    env:
+      ANTHROPIC_MODEL: claude-opus-4-20250514
+      ANTHROPIC_API_KEY: ${ANT_API_KEY}
+
+    fallback:
+      # Fallback 1: Same CLI, cheaper model (Sonnet)
+      # Only override ANTHROPIC_MODEL; API key is inherited from agent env.
+      - label: sonnet-fallback
+        type: claude
+        max_restarts: 3
+        env:
+          ANTHROPIC_MODEL: claude-sonnet-4-20250514
+
+      # Fallback 2: Same CLI, 3rd party Anthropic-compatible provider
+      # Override the full endpoint to route through a different provider.
+      - label: openrouter-fallback
+        type: claude
+        max_restarts: 3
+        env:
+          ANTHROPIC_BASE_URL: ${OPENROUTER_ANT_URL}
+          ANTHROPIC_MODEL: ${OPENROUTER_ANT_MODEL}
+          ANTHROPIC_API_KEY: ${OPENROUTER_ANT_KEY}
+
+  # ────────────────────────────────────────────────────────────────────
+  # USE CASE 2: Cross-CLI Tool Fallback
+  # ────────────────────────────────────────────────────────────────────
+  # Strategy: Cascade through entirely different CLI tools.
+  #   claude → codex → gemini → local LLM (via codex)
+  #
+  # When to use: You want maximum resilience. If one vendor's API
+  # is down, try another vendor's tool. Last resort: self-hosted LLM
+  # with zero API cost and no network dependency.
+  # ────────────────────────────────────────────────────────────────────
   - name: DEV
     icon: 🔵
-    type: codex                # CLI type: codex
+    type: claude
     prompt: prompts/dev.txt
     interval: 10
     timeout: 600
@@ -50,42 +107,84 @@ agents:
     working_dirs:
       - server/src/
       - client/src/
-    # Example: Codex with 3rd party model (requires codex v0.80.0)
+
+    # Primary: Claude CLI (Anthropic)
     env:
-      CODEX_MODEL: ${QW_OAI_MODEL}
-      CODEX_PROVIDER: dashscope
-      CODEX_BASE_URL: ${QW_OAI_URL}
-      CODEX_WIRE_API: chat
-      OPENAI_API_KEY: ${QW_OAI_KEY}
-    # Example Strategy: Switch underlying tool CLI entirely
+      ANTHROPIC_API_KEY: ${ANT_API_KEY}
+
     fallback:
-      - label: use-gemini
+      # Fallback 1: Switch to Codex CLI (OpenAI)
+      # Completely different CLI tool and provider.
+      - label: codex-openai
+        type: codex
+        max_restarts: 3
+        env:
+          OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+      # Fallback 2: Switch to Gemini CLI (Google)
+      # GEMINI_API_KEY should be set in .crew/.env
+      - label: gemini-google
         type: gemini
         max_restarts: 3
-      - label: use-opencode
-        type: opencode
+
+      # Fallback 3: Local LLM via Codex CLI (self-hosted, no API cost)
+      # Codex supports OpenAI-compatible local servers (Ollama, LMStudio, etc.)
+      - label: local-llm
+        type: codex
         max_restarts: 3
+        env:
+          CODEX_MODEL: ${LOCAL_OAI_MODEL}
+          CODEX_PROVIDER: local
+          CODEX_BASE_URL: ${LOCAL_OAI_URL}
+          CODEX_WIRE_API: chat
+          OPENAI_API_KEY: ${LOCAL_OAI_KEY}
 
-
+  # ────────────────────────────────────────────────────────────────────
+  # USE CASE 3: Mixed Strategy with Script Fallback
+  # ────────────────────────────────────────────────────────────────────
+  # Strategy: Try AI tools first, then fall back to a custom script.
+  #   claude → opencode → ./scripts/notify.sh
+  #
+  # When to use: For non-critical tasks where you'd rather send a
+  # notification (SMS, Slack, email) than let the agent die silently.
+  # The script fallback is also useful for:
+  #   - Triggering CI/CD pipelines
+  #   - Running pre-built automation (linting, formatting)
+  #   - Posting to monitoring dashboards
+  #   - Any shell command as a last resort
+  # ────────────────────────────────────────────────────────────────────
   - name: JANITOR
     icon: 🟢
-    type: claude                # CLI type: claude
+    type: claude
     prompt: prompts/janitor.txt
-    interval: 1800     # 30 minutes
+    interval: 1800     # 30 minutes - lightweight maintenance task
     timeout: 600
     max_restarts: 5
     working_dirs:
       - docs/
       - "*.md"
       - "*screenshot*"
-    # Example Strategy: Mix tool/model changes and custom shell scripts
+
+    # Primary: Claude CLI
+    env:
+      ANTHROPIC_API_KEY: ${ANT_API_KEY}
+
     fallback:
-      - label: opencode-custom
+      # Fallback 1: Switch to OpenCode CLI
+      # OpenCode supports various models via its own config.
+      - label: opencode-backup
         type: opencode
         max_restarts: 3
         env:
-          OPENCODE_MODEL: zen/big-pickle
-      - label: emergency-script
-        command: ./scripts/emergency-cleanup.sh
-        max_restarts: 3
+          OPENCODE_MODEL: ${OPENCODE_MODEL}
 
+      # Fallback 2: Custom script - notify the team
+      # When ALL AI tools fail, run a shell script instead.
+      # The script receives the prompt file via stdin, same as CLI plugins.
+      # Example uses:
+      #   - Send SMS/Slack alert: "JANITOR agent exhausted all AI fallbacks"
+      #   - Run a simpler non-AI cleanup script
+      #   - Post to PagerDuty / Opsgenie
+      - label: notify-team
+        command: ./scripts/notify.sh
+        max_restarts: 1

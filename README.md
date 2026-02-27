@@ -288,74 +288,104 @@ export OPENAI_API_KEY="sk-..."
 
 ## Fallback Mechanism
 
-When an agent fails repeatedly (reaching `max_restarts`), it can automatically fall back to alternative models, tools, or custom scripts. Configure a `fallback` chain per-agent in `.crew/crew.yaml`.
+When an agent fails repeatedly (reaching `max_restarts`), it automatically falls back to the next level in its fallback chain. Each level can change the CLI type, env vars, or both.
 
-### Fallback Order
+### How It Works
 
 ```mermaid
 flowchart LR
-    A[Primary] -->|Fails max_restarts| B[Fallback 0]
-    B -->|Fails| C[Fallback 1]
+    A[Primary] -->|Fails max_restarts| B[Fallback 1]
+    B -->|Fails| C[Fallback 2]
     C -->|Fails| D[Exhausted / Stop]
     A -.->|Success| A
     B -.->|Success| B
     C -.->|Success| C
 ```
 
-Fallback mechanisms support three advanced usage patterns:
-1. **Model/Provider Override:** Keep the same CLI tool (e.g., `claude`) but change environment variables (like `ANTHROPIC_BASE_URL`) to use a different model or API provider.
-2. **CLI Tool Switch:** Completely change the underlying AI CLI tool (e.g., from `type: codex` to `type: gemini`).
-3. **Custom Command:** Run any custom shell script as a final recovery step (e.g., `command: ./emergency-script.sh`).
-
-### Configuration Examples
-
-Below are examples of different fallback strategies (see `templates/crew.yaml.example` for a complete file):
-
-```yaml
-agents:
-  - name: QA  # Strategy 1: Switch models/providers
-    type: claude
-    max_restarts: 5
-    fallback:
-      - label: deepseek-coder
-        type: claude
-        max_restarts: 3
-        env:
-          ANTHROPIC_BASE_URL: https://api.deepseek.com/v1
-          ANTHROPIC_MODEL: deepseek-coder
-
-  - name: DEV  # Strategy 2: Switch CLI tools entirely
-    type: codex
-    max_restarts: 5
-    fallback:
-      - label: use-gemini
-        type: gemini
-        max_restarts: 2
-      - label: use-opencode
-        type: opencode
-        max_restarts: 2
-
-  - name: JANITOR  # Strategy 3: Custom model & shell scripts
-    type: claude
-    max_restarts: 3
-    fallback:
-      - label: opencode-custom
-        type: opencode
-        max_restarts: 2
-        env:
-          OPENCODE_MODEL: custom-model-v1
-      - label: emergency-script
-        command: ./scripts/emergency-cleanup.sh
-        max_restarts: 1
-```
-
-### Behavior
-
 - Each level retries up to its `max_restarts` (default: 5) with exponential backoff
-- On success at any level, the agent **stays at that level** (does not revert)
-- After all levels are exhausted, the agent stops and will not be auto-restarted
+- On success, the agent **stays at that level** (does not revert to primary)
+- After all levels are exhausted, the agent stops (`.crew/run/<name>.exhausted`)
+- Fallback-level `env` vars are **merged on top** of agent-level env — only override what changes
 - Use `crew restart AGENT` to reset the fallback chain and start from primary
 - `crew status` shows the current active fallback level
+
+### Use Case 1: Same CLI, Model Degradation
+
+Stay on the same CLI tool but step down through cheaper models or providers:
+
+```yaml
+# opus (best) → sonnet (balanced) → 3rd party (cheapest)
+- name: QA
+  type: claude
+  max_restarts: 5
+  env:
+    ANTHROPIC_MODEL: claude-opus-4-20250514
+    ANTHROPIC_API_KEY: ${ANT_API_KEY}
+  fallback:
+    - label: sonnet-fallback
+      type: claude
+      max_restarts: 3
+      env:
+        ANTHROPIC_MODEL: claude-sonnet-4-20250514  # API key inherited
+    - label: openrouter-fallback
+      type: claude
+      max_restarts: 3
+      env:
+        ANTHROPIC_BASE_URL: ${OPENROUTER_ANT_URL}
+        ANTHROPIC_MODEL: ${OPENROUTER_ANT_MODEL}
+        ANTHROPIC_API_KEY: ${OPENROUTER_ANT_KEY}
+```
+
+### Use Case 2: Cross-CLI Tool Fallback
+
+Cascade through entirely different CLI tools for maximum resilience:
+
+```yaml
+# claude → codex → gemini → local LLM (self-hosted, no API cost)
+- name: DEV
+  type: claude
+  max_restarts: 5
+  env:
+    ANTHROPIC_API_KEY: ${ANT_API_KEY}
+  fallback:
+    - label: codex-openai
+      type: codex
+      max_restarts: 3
+      env:
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+    - label: gemini-google
+      type: gemini
+      max_restarts: 3
+    - label: local-llm
+      type: codex
+      max_restarts: 3
+      env:
+        CODEX_MODEL: ${LOCAL_OAI_MODEL}
+        CODEX_PROVIDER: local
+        CODEX_BASE_URL: ${LOCAL_OAI_URL}
+        CODEX_WIRE_API: chat
+        OPENAI_API_KEY: ${LOCAL_OAI_KEY}
+```
+
+### Use Case 3: Script Fallback
+
+When all AI tools fail, run a custom shell script as last resort — send notifications, trigger CI/CD, or run non-AI automation:
+
+```yaml
+# claude → opencode → notify team via script
+- name: JANITOR
+  type: claude
+  max_restarts: 5
+  fallback:
+    - label: opencode-backup
+      type: opencode
+      max_restarts: 3
+    - label: notify-team
+      command: ./scripts/notify.sh  # sends SMS/Slack/PagerDuty alert
+      max_restarts: 1
+```
+
+> See [`templates/crew.yaml.example`](templates/crew.yaml.example) for a complete annotated configuration.
 
 ## Environment Variables
 
