@@ -8,13 +8,21 @@ cli_claude_check() {
 cli_claude_run() {
   local prompt_file="$1"
   local working_dir="$2"
-  (cd "$working_dir" && claude --dangerously-skip-permissions -p < "$prompt_file")
+  if ! cd "$working_dir" 2>/dev/null; then
+    echo "claude: working directory does not exist: $working_dir" >&2
+    return 1
+  fi
+  claude --dangerously-skip-permissions -p < "$prompt_file"
 }
 
 cli_claude_run_prompt() {
   local prompt="$1"
   local working_dir="$2"
-  (cd "$working_dir" && echo "$prompt" | claude --dangerously-skip-permissions -p -)
+  if ! cd "$working_dir" 2>/dev/null; then
+    echo "claude: working directory does not exist: $working_dir" >&2
+    return 1
+  fi
+  printf '%s' "$prompt" | claude --dangerously-skip-permissions -p -
 }
 
 cli_claude_pre_run() {

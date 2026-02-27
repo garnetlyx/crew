@@ -14,15 +14,25 @@ cli_opencode_check() {
 cli_opencode_run() {
   local prompt_file="$1"
   local working_dir="$2"
+  if ! cd "$working_dir" 2>/dev/null; then
+    echo "opencode: working directory does not exist: $working_dir" >&2
+    return 1
+  fi
   local message
   message=$(cat "$prompt_file")
-  (cd "$working_dir" && opencode run -- "$message")
+  local cmd=(opencode run -- "$message")
+  "${cmd[@]}" < /dev/null
 }
 
 cli_opencode_run_prompt() {
   local prompt="$1"
   local working_dir="$2"
-  (cd "$working_dir" && opencode run -- "$prompt")
+  if ! cd "$working_dir" 2>/dev/null; then
+    echo "opencode: working directory does not exist: $working_dir" >&2
+    return 1
+  fi
+  local cmd=(opencode run -- "$prompt")
+  "${cmd[@]}" < /dev/null
 }
 
 cli_opencode_install_hint() {

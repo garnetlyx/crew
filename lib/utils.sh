@@ -56,7 +56,7 @@ file_hash() {
     echo ""
     return 0
   fi
-  
+
   if command_exists md5; then
     md5 -q "$1" 2>/dev/null || true
   elif command_exists md5sum; then
@@ -71,7 +71,9 @@ file_hash() {
 separator() {
   local char="${1:--}"
   local width="${2:-60}"
-  printf '%*s\n' "$width" '' | tr ' ' "$char"
+  local str
+  printf -v str '%*s' "$width" ''
+  echo "${str// /$char}"
 }
 
 # Print a header
@@ -122,8 +124,19 @@ validate_file_path() {
     log_error "Path traversal not allowed: $path"
     return 1
   fi
-  if [[ "$path" == *$'\0'* ]]; then
+  # Bash variables can't hold actual null bytes, but reject encoded representations
+  if printf '%s' "$path" | grep -qE '\\x00|\\0|%00'; then
     log_error "Null bytes not allowed in path: $path"
+    return 1
+  fi
+  # Reject backslashes and non-ASCII bytes (blocks Unicode homoglyph bypasses
+  # like U+2024, U+FF0E and encoded escape sequences like \u2024)
+  if [[ "$path" == *\\* ]]; then
+    log_error "Backslashes not allowed in path: $path"
+    return 1
+  fi
+  if printf '%s' "$path" | LC_ALL=C grep -q '[^[:print:]]'; then
+    log_error "Non-ASCII characters not allowed in path: $path"
     return 1
   fi
 }
@@ -156,10 +169,12 @@ wait_with_spinner() {
   local message="${2:-Processing...}"
   local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
   local i=0
-  
+
   while kill -0 "$pid" 2>/dev/null; do
     printf "\r${CYAN}%s${NC} %s" "${spin:i++%${#spin}:1}" "$message"
     sleep 0.1
   done
   printf "\r"
 }
+
+

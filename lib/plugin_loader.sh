@@ -76,6 +76,19 @@ load_plugin() {
     [[ -z "$dir" ]] && continue
     local plugin_file="$dir/${name}.sh"
     if [[ -f "$plugin_file" ]]; then
+      # Reject world-writable plugin files to prevent privilege escalation
+      if [[ "$(uname)" == "Darwin" ]]; then
+        local perms
+        perms=$(stat -f '%Lp' "$plugin_file" 2>/dev/null || echo "")
+      else
+        local perms
+        perms=$(stat -c '%a' "$plugin_file" 2>/dev/null || echo "")
+      fi
+      if [[ -n "$perms" ]] && [[ "${perms: -1}" =~ [2367] ]]; then
+        log_error "Plugin file is world-writable (mode $perms), refusing to load: $plugin_file"
+        return 1
+      fi
+
       log_debug "Loading plugin: $name from $plugin_file"
       source "$plugin_file"
 
@@ -115,6 +128,15 @@ plugin_run() {
   local working_dir="${3:-$PWD}"
   local mode="${4:-crew}"
 
+  # Validate working_dir to prevent path traversal
+  if [[ "$working_dir" != "$PWD" ]]; then
+    validate_file_path "$working_dir" || { log_error "Invalid working_dir: $working_dir"; return 1; }
+  fi
+  if [[ ! -d "$working_dir" ]]; then
+    log_error "working_dir does not exist: $working_dir"
+    return 1
+  fi
+
   load_plugin "$name" "$mode" || return 1
 
   if ! "cli_${name}_check"; then
@@ -141,6 +163,15 @@ plugin_run_prompt() {
   local working_dir="${3:-$PWD}"
   local mode="${4:-design}"
 
+  # Validate working_dir to prevent path traversal
+  if [[ "$working_dir" != "$PWD" ]]; then
+    validate_file_path "$working_dir" || { log_error "Invalid working_dir: $working_dir"; return 1; }
+  fi
+  if [[ ! -d "$working_dir" ]]; then
+    log_error "working_dir does not exist: $working_dir"
+    return 1
+  fi
+
   load_plugin "$name" "$mode" || return 1
 
   if ! "cli_${name}_check"; then
@@ -160,8 +191,11 @@ plugin_run_prompt() {
     "cli_${name}_run_prompt" "$prompt" "$working_dir"
   else
     # Fallback: write to temp file and use _run
-    local tmp_file
+    local tmp_file old_umask
+    old_umask=$(umask)
+    umask 077
     tmp_file=$(mktemp)
+    umask "$old_umask"
     echo "$prompt" > "$tmp_file"
     "cli_${name}_run" "$tmp_file" "$working_dir"
     local rc=$?

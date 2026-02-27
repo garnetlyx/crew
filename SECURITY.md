@@ -26,7 +26,9 @@ running.
 
 ## Command Execution
 
-As of v0.1.0, `crew` does **not** use `eval` to execute agent commands. Commands from `crew.yaml` are parsed into arrays and executed directly, which prevents shell injection through config values.
+`crew` uses `eval` only for the deprecated `command:` field in `crew.yaml`, which executes raw shell commands. For new configurations, always use the `type:` field (plugin-based execution) instead. Plugin-based execution parses commands into arrays and executes directly, avoiding shell injection risks.
+
+**Environment variable expansion** in `crew.yaml` `env:` values uses `envsubst` (with a pure-Bash fallback) to safely expand `${VAR}` references. This does NOT execute subshells (`$(...)`), backticks, or any command substitution — only environment variable lookup.
 
 If you need complex commands (pipes, redirects, shell operators), use a wrapper script instead of inline shell in the config.
 
