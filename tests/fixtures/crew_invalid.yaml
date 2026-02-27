@@ -1,0 +1,5 @@
+agents:
+  - name: QA
+    prompt: prompts/qa.md
+  invalid yaml here: [
+    broken

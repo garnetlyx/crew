@@ -1,0 +1,19 @@
+{
+  "agent": "gemini",
+  "agents": [
+    {
+      "name": "QA",
+      "prompt": "prompts/qa.md",
+      "type": "claude"
+    },
+    {
+      "name": "DEV",
+      "prompt": "prompts/dev.md",
+      "type": "gemini"
+    },
+    {
+      "name": "JANITOR",
+      "prompt": "prompts/janitor.md"
+    }
+  ]
+}
