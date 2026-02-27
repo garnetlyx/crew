@@ -1,8 +1,8 @@
 # crew - Product Requirements Document
 
-**Version**: 0.2.0
+**Version**: 0.2.1
 **Status**: Implemented
-**Last Updated**: 2026-02-06
+**Last Updated**: 2026-02-26
 
 ---
 
@@ -116,6 +116,10 @@ crew solves these by automating agent coordination and enabling AI-to-AI feedbac
 - [x] **Strict mode**: `set -euo pipefail` in all library files
 - [x] **Trap handlers**: Graceful cleanup on EXIT/INT/TERM signals
 - [x] **Exponential backoff**: Max restarts (5) with backoff capped at 300s
+- [x] **Multi-level fallback chains**: Model degradation, cross-CLI fallback, script fallback
+- [x] **Codex 3rd party models**: `CODEX_*` env vars for custom providers (DashScope, local LLMs)
+- [x] **Design init from file**: `design init <filename>` reads idea from file
+- [x] **Configurable history saving**: Toggle history via `history.enabled` in design.yaml
 
 ### 4.2 Planned
 

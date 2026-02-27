@@ -1,7 +1,7 @@
 # crew - Architecture Document
 
-**Version**: 0.2.0
-**Last Updated**: 2026-02-06
+**Version**: 0.2.1
+**Last Updated**: 2026-02-26
 
 ---
 
@@ -439,3 +439,33 @@ Environment variables take precedence:
 - **File permissions**: PID/log files created with user's default umask
 - **Process isolation**: Agents run as subprocesses with inherited permissions
 - **No secrets**: Configuration files should not contain secrets; use environment variables
+
+---
+
+## 8. Fallback Chain Architecture
+
+### 8.1 Multi-Level Fallback
+
+Each agent supports an explicit fallback chain configured in `crew.yaml`. When `max_restarts` is exhausted at one level, the next level takes over:
+
+```
+Level 0 (primary)  →  exhausted  →  Level 1 (fallback[0])
+Level 1            →  exhausted  →  Level 2 (fallback[1])
+...                →  exhausted  →  Agent stops (.crew/run/<name>.exhausted)
+```
+
+### 8.2 Fallback Resolution (lib/config.sh)
+
+Per-level resolution hierarchy:
+- **CLI type**: `fallback[N].type` → agent `type` → `"claude"` (default)
+- **Command**: `fallback[N].command` → agent `command` (for legacy `type: "command"`)
+- **Max restarts**: `fallback[N].max_restarts` → `DEFAULT_MAX_RESTARTS` (5)
+- **Environment**: agent-level `env` merged with `fallback[N].env` overlay
+
+### 8.3 Supported Fallback Patterns
+
+| Pattern | Example | Use Case |
+|---------|---------|----------|
+| Model degradation | opus → sonnet → 3rd party | Cost optimization, rate limit resilience |
+| Cross-CLI fallback | claude → codex → gemini → local | Maximum vendor resilience |
+| Script fallback | claude → `./scripts/notify.sh` | Alerting when all AI tools fail |
