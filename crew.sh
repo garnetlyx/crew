@@ -108,90 +108,17 @@ crew_init() {
   ensure_dir "$CREW_DIR/logs"
   ensure_dir "$CREW_DIR/run"
   
-  # Create default config
-  cat > "$CONFIG_FILE" << 'EOF'
-# Crew Configuration
-project: my-project
-log_dir: .crew/logs
-check_interval: 30
-
-agents:
-  - name: QA
-    icon: "\U0001F534"
-    type: claude                 # CLI type: claude, codex, opencode, gemini, aider
-    prompt: prompts/qa.md
-    interval: 10
-    timeout: 600
-    # max_restarts: 5           # Retries before fallback (default: 5)
-    # Per-agent environment variables
-    # env:
-    #   ANTHROPIC_BASE_URL: ${1ST_ANT_URL}
-    #   ANTHROPIC_MODEL: ${1ST_ANT_MODEL}
-    #   ANTHROPIC_API_KEY: ${1ST_ANT_KEY}
-    #
-    # Model fallback chain (tried in order when max_restarts exhausted):
-    # fallback:
-    #   - label: sonnet
-    #     max_restarts: 3
-    #     env:
-    #       ANTHROPIC_MODEL: claude-sonnet-4-20250514
-    #   - label: codex-fallback
-    #     type: codex            # Switch CLI on fallback
-    #     max_restarts: 3
-
-  - name: DEV
-    icon: "\U0001F535"
-    type: claude
-    prompt: prompts/dev.md
-    interval: 10
-    timeout: 600
-
-  - name: JANITOR
-    icon: "\U0001F7E2"
-    type: claude
-    prompt: prompts/janitor.md
-    interval: 10
-    timeout: 600
-
-# ──────────────────────────────────────────────
-# CLI Types
-# ──────────────────────────────────────────────
-# Built-in types: claude, codex, opencode, gemini, aider
-# Custom plugins: drop .sh files in .crew/cli.d/ or ~/.crew/cli.d/
-# Run 'crew plugins' to see available types.
-#
-# Legacy: use 'command' field instead of 'type' for custom CLIs:
-#   - name: CUSTOM
-#     command: my-cli --auto
-#     prompt: prompts/custom.md
-#
-# ──────────────────────────────────────────────
-# 3rd Party / Self-Hosted Model Configuration
-# ──────────────────────────────────────────────
-# Env var naming: {PROVIDER}_ANT_{URL|MODEL|KEY} for Anthropic-compatible,
-#                 {PROVIDER}_OAI_{URL|MODEL|KEY} for OpenAI-compatible.
-#
-# Claude with 3rd party (Anthropic-compatible):
-#   - name: DEV
-#     type: claude
-#     env:
-#       ANTHROPIC_BASE_URL: ${OPENROUTER_ANT_URL}
-#       ANTHROPIC_MODEL: ${OPENROUTER_ANT_MODEL}
-#
-# Codex with 3rd party (OpenAI-compatible, requires codex v0.80.0):
-#   - name: DEV
-#     type: codex
-#     env:
-#       CODEX_MODEL: ${QW_OAI_MODEL}
-#       CODEX_PROVIDER: dashscope
-#       CODEX_BASE_URL: ${QW_OAI_URL}
-#       CODEX_WIRE_API: chat
-#       OPENAI_API_KEY: ${QW_OAI_KEY}
-#
-# WARNING: Do NOT put API keys in this file if it's committed to git.
-# Set API keys in .crew/.env or your shell environment instead.
-EOF
-  log_ok "Created $CONFIG_FILE"
+  # Copy default config from templates
+  local crew_home
+  crew_home=$(get_crew_home)
+  
+  if [[ -f "$crew_home/templates/crew.yaml.example" ]]; then
+    cp "$crew_home/templates/crew.yaml.example" "$CONFIG_FILE"
+    log_ok "Created $CONFIG_FILE from template"
+  else
+    log_error "Template not found: $crew_home/templates/crew.yaml.example"
+    return 1
+  fi
 
   # Copy default prompts from crew home
   local crew_home

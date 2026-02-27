@@ -249,28 +249,22 @@ design_init() {
   echo "$idea" > "$design_dir/idea.txt"
   log_ok "Saved idea to $design_dir/idea.txt"
   
-  # Create default config
-  local agent_type
-  agent_type=$(get_agent_type "")
+  # Copy default config from templates
+  local crew_home
+  crew_home=$(get_crew_home)
   
-  cat > "$design_dir/design.yaml" << EOF
-# Design-Review Design Session
-project: $(basename "$PWD")
-writer_agent: $agent_type
-reviewer_agent: $agent_type
-max_iterations: 5
-
-termination:
-  stale_threshold: 2
-
-prompts:
-  plan_writer: prompts/plan_writer.md
-  reviewer: prompts/reviewer.md
-
-history:
-  enabled: true
-  dir: history/
-EOF
+  if [[ -f "$crew_home/templates/design.yaml.example" ]]; then
+    # We still want to replace the project name
+    sed "s/^project: .*/project: $(basename "$PWD")/" "$crew_home/templates/design.yaml.example" > "$design_dir/design.yaml"
+    
+    # Optional: If you want to replace writer_agent/reviewer_agent with system default agent_type, 
+    # we can use sed for that too, or just leave the template default
+    # sed -i '' "s/^writer_agent: .*/writer_agent: $agent_type/" "$design_dir/design.yaml"
+    # sed -i '' "s/^reviewer_agent: .*/reviewer_agent: $agent_type/" "$design_dir/design.yaml"
+  else
+    log_error "Template not found: $crew_home/templates/design.yaml.example"
+    return 1
+  fi
   log_ok "Created $design_dir/design.yaml"
   
   # Copy default prompts if not customized
