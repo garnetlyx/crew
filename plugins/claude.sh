@@ -12,6 +12,8 @@ cli_claude_run() {
     echo "claude: working directory does not exist: $working_dir" >&2
     return 1
   fi
+  # Allow crew-spawned agents to run inside a Claude Code parent session
+  unset CLAUDECODE
   claude --dangerously-skip-permissions -p < "$prompt_file"
 }
 
@@ -22,6 +24,7 @@ cli_claude_run_prompt() {
     echo "claude: working directory does not exist: $working_dir" >&2
     return 1
   fi
+  unset CLAUDECODE
   printf '%s' "$prompt" | claude --dangerously-skip-permissions -p -
 }
 
