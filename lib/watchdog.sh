@@ -582,6 +582,8 @@ start_agent() {
   (
     cd "$working_dir" || exit 1
 
+    local child_pid_file="$crew_dir/run/${name}.child_pid"
+
     _handle_term() {
       # Kill timeout watchdog to prevent orphaned sleep processes
       if [[ -n "${timeout_pid:-}" ]] && kill -0 "$timeout_pid" 2>/dev/null; then
@@ -592,6 +594,14 @@ start_agent() {
         _kill_subtree "$child_pid" "TERM"
         kill -TERM "$child_pid" 2>/dev/null || true
       fi
+      # Also kill child tracked in file (covers the cleared-var window)
+      local _tracked_child
+      _tracked_child=$(cat "$child_pid_file" 2>/dev/null || true)
+      if [[ -n "$_tracked_child" ]] && [[ "$_tracked_child" != "${child_pid:-}" ]]; then
+        _kill_subtree "$_tracked_child" "TERM"
+        kill -TERM "$_tracked_child" 2>/dev/null || true
+      fi
+      rm -f "$child_pid_file"
     }
     trap _handle_term TERM INT
 
@@ -676,6 +686,9 @@ start_agent() {
           plugin_run "$cli_type" "$effective_prompt" "$working_dir" >> "$log_file" 2>&1 &
         fi
         child_pid=$!
+        # Track child PID in file so stop_agent can find it even if the
+        # bash variable is cleared between restart cycles (orphan process fix)
+        echo "$child_pid" > "$child_pid_file"
 
         # Restore signal handler and process any deferred signal (BUG-QA-005)
         # Bash delivers signals at statement boundaries, so no race between
@@ -708,6 +721,7 @@ start_agent() {
         local expected_child_pid="$child_pid"
         wait "$child_pid" || exit_code=$?
         child_pid=""
+        rm -f "$child_pid_file"  # child exited cleanly, clear tracking file
 
         # Clean up shared context temp file
         if [[ "$effective_prompt" != "$prompt_file" ]]; then
@@ -846,10 +860,22 @@ stop_agent() {
   # Remove PID file first (signals the loop to stop)
   rm -f "$pid_file"
 
+  # Also kill any tracked child process (claude -p / codex) that may have
+  # escaped the tree if child_pid was cleared between restart cycles
+  local child_pid_file="$crew_dir/run/${name}.child_pid"
+  local tracked_child
+  tracked_child=$(cat "$child_pid_file" 2>/dev/null || true)
+
   # Send SIGTERM to entire process tree for graceful shutdown
   if kill -0 "$pid" 2>/dev/null; then
     _kill_subtree "$pid" "TERM"
     kill -TERM "$pid" 2>/dev/null || true
+
+    # Also TERM the tracked child immediately (may have been cleared from tree)
+    if [[ -n "$tracked_child" ]]; then
+      _kill_subtree "$tracked_child" "TERM"
+      kill -TERM "$tracked_child" 2>/dev/null || true
+    fi
 
     # Wait for graceful exit
     local wait_count=0
@@ -870,6 +896,13 @@ stop_agent() {
     log_warn "[$name] Process not found (already stopped)"
   fi
 
+  # Force kill tracked child if still alive (last resort for orphans)
+  if [[ -n "$tracked_child" ]] && kill -0 "$tracked_child" 2>/dev/null; then
+    _kill_subtree "$tracked_child" "9"
+    kill -9 "$tracked_child" 2>/dev/null || true
+  fi
+  rm -f "$child_pid_file"
+
   # Catch any known detached processes that escape the process tree (e.g. Playwright nodes)
   pkill -f "@modelcontextprotocol/server-puppeteer" 2>/dev/null || true
   pkill -f "mcp-server-puppeteer" 2>/dev/null || true
@@ -883,6 +916,7 @@ stop_agent() {
   rm -f "$crew_dir/run/${name}.lastcheck"
   rm -f "$crew_dir/run/${name}.verdict"
   rm -f "$crew_dir/run/${name}.advance"
+  rm -f "$crew_dir/run/${name}.child_pid"
 
   release_pid_lock "$pid_file"
 }
