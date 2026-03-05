@@ -293,6 +293,9 @@ crew_start() {
   # Clean exhausted markers so fallback chain resets on explicit start
   rm -f "$CREW_DIR/run"/*.exhausted 2>/dev/null || true
 
+  # Stop existing watchdog to avoid concurrent monitoring conflicts (e.g. one tracking DEV, one tracking ALL)
+  stop_watchdog 2>/dev/null || true
+
   if [[ ${#agents[@]} -eq 0 ]]; then
     # Start all
     start_all_agents "$CONFIG_FILE"
@@ -330,7 +333,7 @@ crew_start() {
       wd_interval=$(config_get ".check_interval" "$DEFAULT_CHECK_INTERVAL" "$CONFIG_FILE")
     fi
     (
-      watchdog_loop "$CONFIG_FILE" "$wd_interval"
+      watchdog_loop "$CONFIG_FILE" "$wd_interval" "${agents[@]:-}"
     ) < /dev/null &
     local wd_pid=$!
     _write_pid "$wd_pid" "$CREW_DIR/run/watchdog.pid"

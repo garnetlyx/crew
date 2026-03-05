@@ -17,10 +17,11 @@ cli_gemini_run() {
     echo "gemini: working directory does not exist: $working_dir" >&2
     return 1
   fi
-  local message
-  message=$(cat "$prompt_file")
-  local cmd=(gemini -y -p "$message")
-  "${cmd[@]}" < /dev/null
+  # Use a space prefix before the prompt to prevent yargs from parsing
+  # leading hyphens (---) as CLI flags. The space prevents the issue safely.
+  local prompt
+  prompt=$(cat "$prompt_file")
+  gemini -y -p " $prompt"
 }
 
 cli_gemini_run_prompt() {
@@ -30,8 +31,8 @@ cli_gemini_run_prompt() {
     echo "gemini: working directory does not exist: $working_dir" >&2
     return 1
   fi
-  local cmd=(gemini -y -p "$prompt")
-  "${cmd[@]}" < /dev/null
+  # Use a space prefix to prevent yargs parsing errors for dashes.
+  gemini -y -p " $prompt"
 }
 
 cli_gemini_install_hint() {

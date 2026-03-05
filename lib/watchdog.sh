@@ -415,7 +415,25 @@ export_fallback_env() {
 acquire_pid_lock() {
   local pid_file="$1"
   local lock_dir="${pid_file}.lock"
-  mkdir "$lock_dir" 2>/dev/null || return 1
+  
+  if mkdir "$lock_dir" 2>/dev/null; then
+    return 0
+  fi
+
+  # Lock is held. Check if stale (> 10s old)
+  local mtime now age
+  mtime=$(stat -f "%m" "$lock_dir" 2>/dev/null || stat -c "%Y" "$lock_dir" 2>/dev/null || echo 0)
+  now=$(date +%s)
+  age=$((now - mtime))
+
+  if [[ "$age" -gt 10 ]]; then
+    rmdir "$lock_dir" 2>/dev/null || true
+    if mkdir "$lock_dir" 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  return 1
 }
 
 # Release PID lock
@@ -852,6 +870,12 @@ stop_agent() {
     log_warn "[$name] Process not found (already stopped)"
   fi
 
+  # Catch any known detached processes that escape the process tree (e.g. Playwright nodes)
+  pkill -f "@modelcontextprotocol/server-puppeteer" 2>/dev/null || true
+  pkill -f "mcp-server-puppeteer" 2>/dev/null || true
+  pkill -f "playwright-mcp" 2>/dev/null || true
+  pkill -f "gemini -y" 2>/dev/null || true
+
   # Clean up fallback state files
   rm -f "$crew_dir/run/${name}.fallback"
   rm -f "$crew_dir/run/${name}.exhausted"
@@ -983,6 +1007,12 @@ stop_all_agents() {
   for lock_dir in "$crew_dir/run"/*.lock; do
     if [[ -d "$lock_dir" ]]; then rmdir "$lock_dir" 2>/dev/null || true; fi
   done
+
+  # Catch any known detached processes that escape the process tree
+  pkill -f "@modelcontextprotocol/server-puppeteer" 2>/dev/null || true
+  pkill -f "mcp-server-puppeteer" 2>/dev/null || true
+  pkill -f "playwright-mcp" 2>/dev/null || true
+  pkill -f "gemini -y" 2>/dev/null || true
 }
 
 # ── Progress Watchdog (T049) ──────────────────────────────────────────────────
@@ -1446,6 +1476,8 @@ _handle_stuck_agent() {
 watchdog_loop() {
   local config_file="$1"
   local check_interval="${2:-$DEFAULT_CHECK_INTERVAL}"
+  shift 2
+  local agents_args=("$@")
 
   log_info "Watchdog started (interval: ${check_interval}s)"
 
@@ -1485,7 +1517,11 @@ watchdog_loop() {
     _interruptible_sleep "$check_interval" "$stop_sentinel" || break
 
     local agents
-    agents=$(config_get ".agents[].name" "" "$config_file")
+    if [[ ${#agents_args[@]} -gt 0 ]]; then
+      agents=$(printf "%s\n" "${agents_args[@]}")
+    else
+      agents=$(config_get ".agents[].name" "" "$config_file")
+    fi
 
     # ── Health checks (existing behavior) ──
     while IFS= read -r name; do

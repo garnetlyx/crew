@@ -2,6 +2,30 @@
 
 **Last Updated**: 2026-02-27 (CI: all tests green, shellcheck passes)
 
+## KNOWN ISSUES
+
+### Streaming Compatibility (2026-03-05)
+
+Some third-party Anthropic/OpenAI-compatible API providers don't support streaming responses. Since `claude` CLI and `codex` CLI both default to streaming mode, agents using these providers will hang indefinitely with no output.
+
+| Provider | Endpoint | Model | Streaming |
+|----------|----------|-------|-----------|
+| QW/dashscope | Anthropic (`coding.dashscope.aliyuncs.com/apps/anthropic`) | qwen3-max | ✅ |
+| QW/dashscope | OpenAI (`coding.dashscope.aliyuncs.com/v1`) | qwen3.5-plus | ❌ hangs |
+| KM/dashscope | Anthropic | kimi-k2.5 | ❌ hangs |
+| DS_DB/volcengine | Anthropic (`ark.cn-beijing.volces.com/api/coding`) | deepseek-v3.2 | ❌ hangs |
+| MiniMax | Anthropic (`api.minimaxi.com/anthropic`) | MiniMax-M2.5 | ✅ |
+| MiniMax | OpenAI (`api.minimaxi.com/v1`) | MiniMax-M2.5 | ✅ |
+| GLM | Anthropic | GLM-5 | ✅ |
+
+**Symptoms**: Agent starts, `crew ps` shows process alive, but log file stays at 0 bytes. TCP connection is ESTABLISHED but no data flows.
+
+**Diagnosis**: `curl` with `"stream":false` returns instantly; `"stream":true` returns empty.
+
+**Workaround**: Use only streaming-compatible providers in `crew.yaml`. This may change as providers update their APIs — re-test periodically.
+
+---
+
 ## DEV NOTES FOR QA
 
 ### QA-V7-AUDIT-COMPLETE: 9 New Bugs Discovered - ALL PENDING FIX
