@@ -93,6 +93,20 @@ DEFAULT_WD_IDLE_TIMEOUT=1800     # 30min no progress → SUSPECT
 DEFAULT_WD_ON_STUCK="notify"     # Action when stuck: fallback|restart|notify|stop
 MAX_AI_JUDGE_INTERVAL=3600       # Max 1 AI judge call per agent per hour
 
+# Interruptible sleep: sleeps in 1s increments, exits early if sentinel exists.
+# Returns 1 (and breaks caller's loop) when sentinel is detected.
+_interruptible_sleep() {
+  local duration=$1
+  local sentinel="$2"
+  local elapsed=0
+  while [[ "$elapsed" -lt "$duration" ]]; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    [[ -f "$sentinel" ]] && return 1
+  done
+  return 0
+}
+
 # Read PID from a PID file (handles both legacy "PID" and new "PID LSTART" formats).
 # Only returns the PID portion; callers needing birth time should use _verify_pid_owner.
 _read_pid() {
@@ -1458,10 +1472,17 @@ watchdog_loop() {
   local last_progress_check
   last_progress_check=$(date +%s)
 
-  trap 'log_info "Watchdog stopping..."; return 0' INT TERM
+  local stop_sentinel=".crew/run/watchdog.stop"
+
+  # Use exit (not return) — watchdog runs in a subshell, and return only
+  # exits _interruptible_sleep on bash 3.2, allowing the loop to continue.
+  trap 'rm -f "$stop_sentinel"; log_info "Watchdog stopping..."; exit 0' INT TERM
 
   while true; do
-    sleep "$check_interval"
+    # Check sentinel before doing any work (stop_watchdog creates this)
+    [[ -f "$stop_sentinel" ]] && break
+
+    _interruptible_sleep "$check_interval" "$stop_sentinel" || break
 
     local agents
     agents=$(config_get ".agents[].name" "" "$config_file")
@@ -1469,6 +1490,8 @@ watchdog_loop() {
     # ── Health checks (existing behavior) ──
     while IFS= read -r name; do
       [[ -z "$name" ]] && continue
+      # Bail out of health checks if stop was requested
+      [[ -f "$stop_sentinel" ]] && break
       local status
       status=$(get_agent_status "$name")
 
@@ -1493,6 +1516,9 @@ watchdog_loop() {
           ;;
       esac
     done <<< "$agents"
+
+    # Check sentinel again after health checks
+    [[ -f "$stop_sentinel" ]] && break
 
     # ── Progress checks (T049, runs at watchdog.check_interval) ──
     if [[ "$wd_enabled" == "true" ]]; then

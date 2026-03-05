@@ -341,18 +341,40 @@ crew_start() {
   trap - EXIT INT TERM
 }
 
-# Stop the watchdog process if running
+# Stop the watchdog process if running.
+# Creates a sentinel file so the watchdog exits its loop even if SIGTERM
+# can't interrupt its sleep (bash 3.2 on macOS).
 stop_watchdog() {
   local wd_pid_file="$CREW_DIR/run/watchdog.pid"
+  local stop_sentinel="$CREW_DIR/run/watchdog.stop"
+
+  # Create sentinel first — watchdog checks this before restarting agents
+  touch "$stop_sentinel"
+
   if [[ -f "$wd_pid_file" ]]; then
     local wd_pid
     wd_pid=$(_read_pid "$wd_pid_file")
     if kill -0 "$wd_pid" 2>/dev/null; then
       kill -TERM "$wd_pid" 2>/dev/null || true
-      log_info "Watchdog stopped (PID: $wd_pid)"
+
+      # Wait for watchdog to actually exit
+      local wait_count=0
+      while kill -0 "$wd_pid" 2>/dev/null && [[ $wait_count -lt $GRACEFUL_SHUTDOWN_TIMEOUT ]]; do
+        sleep 1
+        wait_count=$((wait_count + 1))
+      done
+
+      if kill -0 "$wd_pid" 2>/dev/null; then
+        kill -9 "$wd_pid" 2>/dev/null || true
+        log_warn "Watchdog force killed (PID: $wd_pid)"
+      else
+        log_info "Watchdog stopped (PID: $wd_pid)"
+      fi
     fi
     rm -f "$wd_pid_file"
   fi
+
+  rm -f "$stop_sentinel"
 }
 
 # Stop agents
