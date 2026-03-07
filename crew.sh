@@ -31,11 +31,24 @@ source "$SCRIPT_DIR/lib/watchdog.sh"
 source "$SCRIPT_DIR/lib/status.sh"
 source "$SCRIPT_DIR/lib/cost.sh"
 
-VERSION="0.3.0"
+VERSION=$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown")
 CREW_DIR=".crew"
-CONFIG_FILE="$CREW_DIR/crew.yaml"
 WATCHDOG_ENABLED=true
 CHECK_INTERVAL=""
+
+# Resolve config file: local .crew/ → parent dirs → ~/.crew/
+# Falls back to local default for commands that don't need an existing config.
+_resolve_config() {
+  local config
+  config=$(find_config "crew.yaml" 2>/dev/null) || config="$CREW_DIR/crew.yaml"
+  echo "$config"
+}
+
+# Get the .crew/ dir that contains the resolved config (for logs, run, prompts)
+_resolve_crew_dir() {
+  local config="$1"
+  dirname "$config"
+}
 
 usage() {
   cat << EOF
@@ -623,6 +636,12 @@ main() {
 
   local cmd="${1:-help}"
   shift 2>/dev/null || true
+
+  # Resolve config for all commands except init and help
+  local CONFIG_FILE
+  CONFIG_FILE=$(_resolve_config)
+  local CREW_DIR
+  CREW_DIR=$(_resolve_crew_dir "$CONFIG_FILE")
 
   case "$cmd" in
     init)

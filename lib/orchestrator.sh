@@ -34,8 +34,15 @@ EXIT_CONFLICT=3    # Same review issues recurring for conflict_threshold iterati
 cross_review_loop() {
   local max_iter_override="${1:-}"
   local dry_run="${2:-false}"
-  local design_dir=".design"
-  local config_file="$design_dir/design.yaml"
+  # Resolve design config: local .design/ → parent dirs → ~/.design/
+  local config_file
+  config_file=$(find_config "design.yaml" 2>/dev/null) || {
+    log_error "No design config found. Run 'design init <idea>' first."
+    log_info "Searched: .design/design.yaml → parent directories → ~/.design/design.yaml"
+    return 1
+  }
+  local design_dir
+  design_dir=$(dirname "$config_file")
 
   # Get config values
   local max_iter
@@ -434,7 +441,14 @@ design_init() {
 
 # Show design status
 design_status() {
-  local design_dir=".design"
+  # Resolve design config: local .design/ → parent dirs → ~/.design/
+  local config_file
+  config_file=$(find_config "design.yaml" 2>/dev/null) || {
+    log_error "No design session found. Run 'design init <idea>' first."
+    return 1
+  }
+  local design_dir
+  design_dir=$(dirname "$config_file")
 
   if [[ ! -d "$design_dir" ]]; then
     log_error "No design session found. Run 'design init <idea>' first."
@@ -502,7 +516,14 @@ design_status() {
 
 # Reset design session
 design_reset() {
-  local design_dir=".design"
+  # Resolve design config: local .design/ → parent dirs → ~/.design/
+  local config_file
+  config_file=$(find_config "design.yaml" 2>/dev/null) || {
+    log_error "No design session found."
+    return 1
+  }
+  local design_dir
+  design_dir=$(dirname "$config_file")
 
   if [[ ! -d "$design_dir" ]]; then
     log_error "No design session found."

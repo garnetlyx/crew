@@ -5,7 +5,8 @@
 class Crew < Formula
   desc "Multi-agent orchestration tool for AI-assisted development"
   homepage "https://github.com/garnetlyx/crew"
-  url "https://github.com/garnetlyx/crew/archive/refs/tags/v0.3.0.tar.gz"
+  version File.read(File.expand_path("../../VERSION", __FILE__)).strip rescue "0.0.0"
+  url "https://github.com/garnetlyx/crew/archive/refs/tags/v#{version}.tar.gz"
   # sha256 "UPDATE_WITH_ACTUAL_SHA256_AFTER_RELEASE"
   license "MIT"
 

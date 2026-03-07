@@ -399,9 +399,23 @@ export ANTHROPIC_API_KEY="sk-..."
 export OPENAI_API_KEY="sk-..."
 ```
 
-### Shared Environment Configuration
+### Shared Configuration
 
-Multiple projects can share a single environment configuration. `crew` searches for `.env` files in the following order:
+Multiple projects can share configuration files. `crew` searches in the following order, with local settings taking the highest priority:
+
+#### Config files (`crew.yaml` / `design.yaml`)
+
+The **first** config file found is used (no merging):
+
+1.  **Local**: `.crew/crew.yaml` in the current directory
+2.  **Parent**: `.crew/crew.yaml` in any parent directory (recursive)
+3.  **Global**: `~/.crew/crew.yaml`
+
+This means you can put a shared `crew.yaml` in `~/dev/.crew/crew.yaml` and all projects under `~/dev/` will inherit it, unless they have their own `.crew/crew.yaml`.
+
+#### Environment files (`.env`)
+
+`.env` files are **merged** (all levels stack):
 
 1.  **Global**: `~/.crew/.env`
 2.  **Parent**: `.crew/.env` or `.design/.env` in any parent directory (recursive)

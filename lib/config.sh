@@ -19,7 +19,8 @@ _assert_safe_yq_name() {
   fi
 }
 
-# Find config file in current or parent directories
+# Find config file in current or parent directories, with global fallback
+# Search order: $PWD → parent dirs → ~/.crew/ (or ~/.design/)
 # Priority: .yaml > .json
 find_config() {
   local config_name="${1:-$CREW_CONFIG_NAME}"
@@ -28,6 +29,7 @@ find_config() {
   # Derive JSON name from YAML name (crew.yaml → crew.json)
   local json_name="${config_name%.yaml}.json"
 
+  # Walk up from $PWD to /
   while [[ "$dir" != "/" ]]; do
     for subdir in .crew .design; do
       if [[ -f "$dir/$subdir/$config_name" ]]; then
@@ -40,6 +42,18 @@ find_config() {
       fi
     done
     dir="$(dirname "$dir")"
+  done
+
+  # Global fallback: ~/.crew/ or ~/.design/
+  for subdir in .crew .design; do
+    if [[ -f "$HOME/$subdir/$config_name" ]]; then
+      echo "$HOME/$subdir/$config_name"
+      return 0
+    fi
+    if [[ -f "$HOME/$subdir/$json_name" ]]; then
+      echo "$HOME/$subdir/$json_name"
+      return 0
+    fi
   done
 
   return 1

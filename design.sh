@@ -21,7 +21,7 @@ source "$SCRIPT_DIR/lib/utils.sh"
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/orchestrator.sh"
 
-VERSION="0.3.0"
+VERSION=$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown")
 
 usage() {
   cat << EOF
