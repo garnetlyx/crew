@@ -19,7 +19,8 @@
 # Only override what changes; the rest is inherited.
 #
 # ── CLI Types ──
-# Built-in plugins: claude, codex, opencode, gemini, aider
+# Built-in plugins: claude, codex, codex_legacy, opencode, gemini, aider
+# codex_legacy uses Codex v0.80.0 (supports wire_api=chat for 3rd party models)
 # Custom plugins:   .crew/cli.d/<name>.sh or ~/.crew/cli.d/<name>.sh
 # Legacy escape:    command: ./your-script.sh (runs via eval)
 #
@@ -148,10 +149,12 @@ agents:
         type: gemini
         max_restarts: 3
 
-      # Fallback 3: Local LLM via Codex CLI (self-hosted, no API cost)
-      # Codex supports OpenAI-compatible local servers (Ollama, LMStudio, etc.)
+      # Fallback 3: Local LLM via Codex Legacy (v0.80.0, supports wire_api=chat)
+      # Use codex_legacy for OpenAI-compatible local servers (Ollama, LMStudio, etc.)
+      # Install: npm install -g @openai/codex@0.80.0 --prefix ~/.codex-legacy
+      #          ln -sf ~/.codex-legacy/bin/codex ~/.local/bin/codex-legacy
       - label: local-llm
-        type: codex
+        type: codex_legacy
         max_restarts: 3
         env:
           CODEX_MODEL: ${LOCAL_OAI_MODEL}

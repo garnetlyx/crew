@@ -234,7 +234,8 @@ crew uses a plugin system for CLI abstraction. Each supported CLI has a plugin t
 | Plugin | CLI | Install |
 |--------|-----|---------|
 | `claude` | Claude Code | `npm install -g @anthropic-ai/claude-code` |
-| `codex` | OpenAI Codex | `npm install -g @openai/codex@0.80.0` (see [Codex notes](#codex-with-3rd-party-models)) |
+| `codex` | OpenAI Codex (latest) | `npm install -g @openai/codex` |
+| `codex_legacy` | OpenAI Codex v0.80.0 | See [dual-version setup](#codex-with-3rd-party-models) |
 | `opencode` | OpenCode | `go install github.com/opencode-ai/opencode@latest` |
 | `gemini` | Google Gemini | `pip install google-gemini-cli` |
 | `aider` | Aider | `pip install aider-chat` |
@@ -296,12 +297,37 @@ agents:
 
 ### Codex with 3rd Party Models
 
-> **IMPORTANT**: Codex CLI v0.105.0+ dropped `wire_api = "chat"` support, which is required by most third-party OpenAI-compatible providers. **Use v0.80.0** when working with non-OpenAI models:
-> ```bash
-> npm install -g @openai/codex@0.80.0
-> ```
+> **IMPORTANT**: Codex CLI v0.105.0+ dropped `wire_api = "chat"` support, which is required by most third-party OpenAI-compatible providers. Use the built-in `codex_legacy` plugin (Codex v0.80.0) when working with non-OpenAI models.
 
-The `codex` plugin supports `CODEX_*` environment variables for configuring custom model providers. These are automatically translated into `-c` flags passed to the codex CLI:
+#### Dual-Version Setup
+
+Install both the latest codex and the legacy version side-by-side:
+
+```bash
+# Install latest codex (global default)
+npm install -g @openai/codex@latest
+
+# Install v0.80.0 to a separate prefix
+npm install -g @openai/codex@0.80.0 --prefix ~/.codex-legacy
+mkdir -p ~/.local/bin
+ln -sf ~/.codex-legacy/bin/codex ~/.local/bin/codex-legacy
+```
+
+Verify both versions:
+
+```bash
+codex --version         # latest (e.g. 0.111.0)
+codex-legacy --version  # 0.80.0
+```
+
+#### Plugin Differences
+
+| Plugin | Binary | Default `wire_api` | Use Case |
+|--------|--------|--------------------|----------|
+| `codex` | `codex` (latest) | `responses` | OpenAI native models |
+| `codex_legacy` | `codex-legacy` (v0.80.0) | `chat` | Third-party OpenAI-compatible providers |
+
+Both plugins support the same `CODEX_*` environment variables:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
@@ -312,22 +338,48 @@ The `codex` plugin supports `CODEX_*` environment variables for configuring cust
 | `CODEX_WIRE_API` | Wire protocol: `chat` or `responses` | `chat` |
 | `CODEX_API_KEY_ENV` | Env var name holding the API key (default: `OPENAI_API_KEY`) | `OPENAI_API_KEY` |
 
-Example `crew.yaml` for codex with DashScope:
+#### Example: Latest Codex with OpenAI, Legacy Fallback to 3rd Party
 
 ```yaml
 agents:
   - name: DEV
-    type: codex
+    type: codex              # latest codex for OpenAI models
+    prompt: prompts/dev.md
+    env:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    fallback:
+      - label: dashscope
+        type: codex_legacy   # v0.80.0 with wire_api=chat
+        env:
+          CODEX_MODEL: qwen3.5-plus
+          CODEX_PROVIDER: dashscope
+          CODEX_BASE_URL: https://coding.dashscope.aliyuncs.com/v1
+          OPENAI_API_KEY: ${QWC_API_KEY}
+      - label: minimax
+        type: codex_legacy
+        env:
+          CODEX_MODEL: MiniMax-M2.5
+          CODEX_PROVIDER: minimax
+          CODEX_BASE_URL: https://api.minimaxi.com/v1
+          OPENAI_API_KEY: ${MINIMAX_API_KEY}
+```
+
+#### Example: Legacy Codex Only (3rd Party Models)
+
+```yaml
+agents:
+  - name: DEV
+    type: codex_legacy
     prompt: prompts/dev.md
     env:
       CODEX_MODEL: qwen3.5-plus
       CODEX_PROVIDER: dashscope
       CODEX_BASE_URL: https://coding.dashscope.aliyuncs.com/v1
       CODEX_WIRE_API: chat
-      OPENAI_API_KEY: ${QWC_API_KEY}   # set in .crew/.env
+      OPENAI_API_KEY: ${QWC_API_KEY}
     fallback:
       - label: minimax
-        type: codex
+        type: codex_legacy
         env:
           CODEX_MODEL: MiniMax-M2.5
           CODEX_PROVIDER: minimax
