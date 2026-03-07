@@ -374,7 +374,7 @@ _plugin_file_exists() {
 
   local project_root="${PROJECT_ROOT:-}"
   if [[ -z "$project_root" && -n "${BASH_SOURCE[0]:-}" ]]; then
-    project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd) 2>/dev/null || true
+    project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) 2>/dev/null || true
   fi
   [[ -n "$project_root" && -f "$project_root/plugins/${plugin_type}.sh" ]] && return 0
 
