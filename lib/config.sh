@@ -89,17 +89,17 @@ find_env_files() {
   if [[ -f "$HOME/.crew/.env" ]]; then
     # Only add if not already in the list (e.g. if HOME is a parent of PWD)
     local found=false
-    for f in "${files[@]}"; do
+    for f in "${files[@]:-}"; do
       if [[ "$f" == "$HOME/.crew/.env" ]]; then
         found=true; break
       fi
     done
     if [[ "$found" == "false" ]]; then
-      files=("$HOME/.crew/.env" "${files[@]}")
+      files=("$HOME/.crew/.env" "${files[@]:-}")
     fi
   fi
 
-  for f in "${files[@]}"; do
+  for f in "${files[@]:-}"; do
     echo "$f"
   done
 }

@@ -303,11 +303,12 @@ crew_start() {
 
   header "Starting Agents"
 
-  ensure_dir "$CREW_DIR/run"
-  ensure_dir "$CREW_DIR/logs"
+  local runtime_dir=".crew"
+  ensure_dir "$runtime_dir/run"
+  ensure_dir "$runtime_dir/logs"
 
   # Clean exhausted markers so fallback chain resets on explicit start
-  rm -f "$CREW_DIR/run"/*.exhausted 2>/dev/null || true
+  rm -f "$runtime_dir/run"/*.exhausted 2>/dev/null || true
 
   # Stop existing watchdog to avoid concurrent monitoring conflicts (e.g. one tracking DEV, one tracking ALL)
   stop_watchdog 2>/dev/null || true
@@ -352,7 +353,7 @@ crew_start() {
       watchdog_loop "$CONFIG_FILE" "$wd_interval" "${agents[@]:-}"
     ) < /dev/null &
     local wd_pid=$!
-    _write_pid "$wd_pid" "$CREW_DIR/run/watchdog.pid"
+    _write_pid "$wd_pid" ".crew/run/watchdog.pid"
     log_info "Watchdog started (PID: $wd_pid, interval: ${wd_interval}s)"
   fi
 
@@ -364,8 +365,9 @@ crew_start() {
 # Creates a sentinel file so the watchdog exits its loop even if SIGTERM
 # can't interrupt its sleep (bash 3.2 on macOS).
 stop_watchdog() {
-  local wd_pid_file="$CREW_DIR/run/watchdog.pid"
-  local stop_sentinel="$CREW_DIR/run/watchdog.stop"
+  local runtime_dir=".crew"
+  local wd_pid_file="$runtime_dir/run/watchdog.pid"
+  local stop_sentinel="$runtime_dir/run/watchdog.stop"
 
   # Create sentinel first — watchdog checks this before restarting agents
   touch "$stop_sentinel"
@@ -536,9 +538,10 @@ crew_report() {
 # Show or edit shared context
 crew_context() {
   local action="${1:-show}"
+  local runtime_dir=".crew"
 
-  ensure_dir "$CREW_DIR/shared"
-  local context_file="$CREW_DIR/shared/context.md"
+  ensure_dir "$runtime_dir/shared"
+  local context_file="$runtime_dir/shared/context.md"
 
   case "$action" in
     show)
