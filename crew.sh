@@ -303,6 +303,9 @@ crew_start() {
 
   header "Starting Agents"
 
+  ensure_dir "$CREW_DIR/run"
+  ensure_dir "$CREW_DIR/logs"
+
   # Clean exhausted markers so fallback chain resets on explicit start
   rm -f "$CREW_DIR/run"/*.exhausted 2>/dev/null || true
 
@@ -639,9 +642,15 @@ main() {
 
   # Resolve config for all commands except init and help
   local CONFIG_FILE
-  CONFIG_FILE=$(_resolve_config)
   local CREW_DIR
-  CREW_DIR=$(_resolve_crew_dir "$CONFIG_FILE")
+
+  if [[ "$cmd" != "init" && "$cmd" != "help" ]]; then
+    CONFIG_FILE=$(_resolve_config)
+    CREW_DIR=$(_resolve_crew_dir "$CONFIG_FILE")
+  else
+    CREW_DIR=".crew"
+    CONFIG_FILE="$CREW_DIR/crew.yaml"
+  fi
 
   case "$cmd" in
     init)
