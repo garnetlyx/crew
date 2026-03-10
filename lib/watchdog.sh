@@ -824,9 +824,10 @@ _kill_subtree() {
 # Removes PID file first so the agent's inner loop exits cleanly on its next
 # iteration check. Then sends SIGTERM to the full process tree, waits up to
 # GRACEFUL_SHUTDOWN_TIMEOUT seconds, and escalates to SIGKILL if still alive.
+# Usage: stop_agent <name> [crew_dir]
 stop_agent() {
   local name="$1"
-  local crew_dir=".crew"
+  local crew_dir="${2:-.crew}"
   local pid_file="$crew_dir/run/${name}.pid"
 
   if [[ ! -f "$pid_file" ]]; then
@@ -1021,8 +1022,10 @@ start_all_agents() {
 }
 
 # Stop all agents
+# Stop all agents
+# Usage: stop_all_agents [crew_dir]
 stop_all_agents() {
-  local crew_dir=".crew"
+  local crew_dir="${1:-.crew}"
 
   if [[ ! -d "$crew_dir/run" ]]; then
     log_info "No agents running"

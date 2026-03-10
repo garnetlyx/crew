@@ -292,8 +292,8 @@ crew_start() {
   _crew_cleanup() {
     local exit_code=$?
     trap - EXIT INT TERM
-    stop_watchdog 2>/dev/null || true
-    stop_all_agents 2>/dev/null || true
+    stop_watchdog "$CREW_DIR" 2>/dev/null || true
+    stop_all_agents "$CREW_DIR" 2>/dev/null || true
     exit "$exit_code"
   }
   trap _crew_cleanup EXIT INT TERM
@@ -311,7 +311,7 @@ crew_start() {
   rm -f "$runtime_dir/run"/*.exhausted 2>/dev/null || true
 
   # Stop existing watchdog to avoid concurrent monitoring conflicts (e.g. one tracking DEV, one tracking ALL)
-  stop_watchdog 2>/dev/null || true
+  stop_watchdog "$CREW_DIR" 2>/dev/null || true
 
   if [[ ${#agents[@]} -eq 0 ]]; then
     # Start all
@@ -365,7 +365,7 @@ crew_start() {
 # Creates a sentinel file so the watchdog exits its loop even if SIGTERM
 # can't interrupt its sleep (bash 3.2 on macOS).
 stop_watchdog() {
-  local runtime_dir=".crew"
+  local runtime_dir="${1:-.crew}"
   local wd_pid_file="$runtime_dir/run/watchdog.pid"
   local stop_sentinel="$runtime_dir/run/watchdog.stop"
 
@@ -405,12 +405,12 @@ crew_stop() {
   header "Stopping Agents"
 
   if [[ ${#agents[@]} -eq 0 ]]; then
-    stop_watchdog
-    stop_all_agents
+    stop_watchdog "$CREW_DIR"
+    stop_all_agents "$CREW_DIR"
   else
     for name in "${agents[@]}"; do
       validate_agent_name "$name" || continue
-      stop_agent "$name"
+      stop_agent "$name" "$CREW_DIR"
     done
   fi
 }
