@@ -20,11 +20,18 @@
 
 ## Installation
 
-### Homebrew (macOS)
+### Homebrew (macOS) — recommended
 
 ```bash
 brew tap garnetlyx/crew
 brew install crew
+```
+
+To uninstall:
+
+```bash
+brew uninstall crew
+brew untap garnetlyx/crew
 ```
 
 ### From Source
@@ -46,7 +53,6 @@ To uninstall:
 ```bash
 cd ~/dev/crew
 ./uninstall.sh
-# Or: brew uninstall crew
 ```
 
 Requires:
