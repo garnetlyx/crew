@@ -30,6 +30,7 @@ source "$SCRIPT_DIR/lib/plugin_loader.sh"
 source "$SCRIPT_DIR/lib/watchdog.sh"
 source "$SCRIPT_DIR/lib/status.sh"
 source "$SCRIPT_DIR/lib/cost.sh"
+source "$SCRIPT_DIR/lib/probe.sh"
 
 VERSION=$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown")
 CREW_DIR=".crew"
@@ -697,6 +698,13 @@ main() {
       ;;
     serve)
       crew_serve "$@"
+      ;;
+    probe)
+      if [[ ! -f "$CONFIG_FILE" ]]; then
+        log_error "No config found. Run 'crew init' first."
+        exit 1
+      fi
+      run_probe_all "$CONFIG_FILE"
       ;;
     validate)
       crew_validate
