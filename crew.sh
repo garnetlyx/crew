@@ -304,19 +304,18 @@ crew_start() {
 
   header "Starting Agents"
 
-  local runtime_dir=".crew"
-  ensure_dir "$runtime_dir/run"
-  ensure_dir "$runtime_dir/logs"
+  ensure_dir "$CREW_DIR/run"
+  ensure_dir "$CREW_DIR/logs"
 
   # Clean exhausted markers so fallback chain resets on explicit start
-  rm -f "$runtime_dir/run"/*.exhausted 2>/dev/null || true
+  rm -f "$CREW_DIR/run"/*.exhausted 2>/dev/null || true
 
   # Stop existing watchdog to avoid concurrent monitoring conflicts (e.g. one tracking DEV, one tracking ALL)
   stop_watchdog "$CREW_DIR" 2>/dev/null || true
 
   if [[ ${#agents[@]} -eq 0 ]]; then
     # Start all
-    start_all_agents "$CONFIG_FILE"
+    start_all_agents "$CONFIG_FILE" "$CREW_DIR"
   else
     # Start specific agents
     for name in "${agents[@]}"; do
@@ -351,10 +350,10 @@ crew_start() {
       wd_interval=$(config_get ".check_interval" "$DEFAULT_CHECK_INTERVAL" "$CONFIG_FILE")
     fi
     (
-      watchdog_loop "$CONFIG_FILE" "$wd_interval" "${agents[@]:-}"
+      watchdog_loop "$CONFIG_FILE" "$wd_interval" "$CREW_DIR" "${agents[@]:-}"
     ) < /dev/null &
     local wd_pid=$!
-    _write_pid "$wd_pid" ".crew/run/watchdog.pid"
+    _write_pid "$wd_pid" "$CREW_DIR/run/watchdog.pid"
     log_info "Watchdog started (PID: $wd_pid, interval: ${wd_interval}s)"
   fi
 
@@ -423,13 +422,13 @@ crew_restart() {
   header "Restarting Agents"
 
   if [[ ${#agents[@]} -eq 0 ]]; then
-    stop_all_agents
+    stop_all_agents "$CREW_DIR"
     sleep 2
-    start_all_agents "$CONFIG_FILE"
+    start_all_agents "$CONFIG_FILE" "$CREW_DIR"
   else
     for name in "${agents[@]}"; do
       validate_agent_name "$name" || continue
-      restart_agent "$name" "$CONFIG_FILE"
+      restart_agent "$name" "$CONFIG_FILE" "$CREW_DIR"
     done
   fi
 }
@@ -441,7 +440,7 @@ crew_status() {
     return 1
   fi
 
-  show_status "$CONFIG_FILE"
+  show_status "$CONFIG_FILE" "$CREW_DIR"
 }
 
 # Show agent processes
@@ -451,7 +450,7 @@ crew_ps() {
     return 1
   fi
 
-  show_processes "$CONFIG_FILE"
+  show_processes "$CONFIG_FILE" "$CREW_DIR"
 }
 
 # Monitor mode
@@ -461,7 +460,7 @@ crew_monitor() {
     return 1
   fi
 
-  monitor_loop "$CONFIG_FILE"
+  monitor_loop "$CONFIG_FILE" "$CREW_DIR"
 }
 
 # Tail logs
@@ -474,7 +473,7 @@ crew_logs() {
   fi
 
   validate_agent_name "$name" || return 1
-  tail_agent_log "$name"
+  tail_agent_log "$name" "$CREW_DIR"
 }
 
 # List available plugins
@@ -523,7 +522,7 @@ crew_cost() {
     return 1
   fi
 
-  show_cost "$CONFIG_FILE"
+  show_cost "$CONFIG_FILE" "$CREW_DIR"
 }
 
 # Show aggregated report
@@ -533,13 +532,13 @@ crew_report() {
     return 1
   fi
 
-  show_report "$CONFIG_FILE"
+  show_report "$CONFIG_FILE" "$CREW_DIR"
 }
 
 # Show or edit shared context
 crew_context() {
   local action="${1:-show}"
-  local runtime_dir=".crew"
+  local runtime_dir="$CREW_DIR"
 
   ensure_dir "$runtime_dir/shared"
   local context_file="$runtime_dir/shared/context.md"
@@ -651,6 +650,11 @@ main() {
   if [[ "$cmd" != "init" && "$cmd" != "help" ]]; then
     CONFIG_FILE=$(_resolve_config)
     CREW_DIR=$(_resolve_crew_dir "$CONFIG_FILE")
+ 
+    # If a local .crew exists, it takes precedence for runtime data (logs, run, shared)
+    if [[ -d ".crew" ]]; then
+      CREW_DIR=".crew"
+    fi
   else
     CREW_DIR=".crew"
     CONFIG_FILE="$CREW_DIR/crew.yaml"

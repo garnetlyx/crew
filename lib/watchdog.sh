@@ -444,12 +444,13 @@ release_pid_lock() {
 }
 
 # ── Shared Context (T065) ──────────────────────────────────────────────────
-# Prepend shared context from .crew/shared/context.md into the agent prompt.
+# Prepend shared context from <crew_dir>/shared/context.md into the agent prompt.
 # Returns path to a temp file with shared context + original prompt combined.
 # If no shared context exists, returns the original prompt_file unchanged.
+# Usage: _build_shared_prompt <prompt_file> [crew_dir]
 _build_shared_prompt() {
   local prompt_file="$1"
-  local crew_dir=".crew"
+  local crew_dir="${2:-.crew}"
   local shared_context="$crew_dir/shared/context.md"
 
   if [[ ! -f "$shared_context" ]] || [[ ! -s "$shared_context" ]]; then
@@ -487,8 +488,9 @@ _build_shared_prompt() {
 
 # Acquire a lock on the shared context file for writing.
 # Uses mkdir for atomic locking (same pattern as PID locks).
+# Usage: acquire_shared_lock [crew_dir]
 acquire_shared_lock() {
-  local crew_dir=".crew"
+  local crew_dir="${1:-.crew}"
   local lock_dir="$crew_dir/shared/.context.lock"
   local max_wait=5
   local waited=0
@@ -505,8 +507,9 @@ acquire_shared_lock() {
 }
 
 # Release shared context write lock.
+# Usage: release_shared_lock [crew_dir]
 release_shared_lock() {
-  local crew_dir=".crew"
+  local crew_dir="${1:-.crew}"
   local lock_dir="$crew_dir/shared/.context.lock"
   rmdir "$lock_dir" 2>/dev/null || true
 }
@@ -554,7 +557,7 @@ start_agent() {
   fi
 
   # Check if already running
-  if is_agent_running "$name"; then
+  if is_agent_running "$name" "$crew_dir"; then
     log_warn "[$name] Already running (PID: $(_read_pid "$pid_file"))"
     release_pid_lock "$pid_file"
     return 1
@@ -666,7 +669,7 @@ start_agent() {
 
         # Inject shared context into prompt (T065)
         local effective_prompt
-        effective_prompt=$(_build_shared_prompt "$prompt_file")
+        effective_prompt=$(_build_shared_prompt "$prompt_file" "$crew_dir")
 
         # Defer TERM/INT during child launch to prevent orphans (D010)
         local _deferred_term=false
@@ -923,22 +926,24 @@ stop_agent() {
 }
 
 # Check if agent is running (with PID reuse detection via lstart verification)
+# Usage: is_agent_running <name> [crew_dir]
 is_agent_running() {
   local name="$1"
-  local crew_dir=".crew"
+  local crew_dir="${2:-.crew}"
   local pid_file="$crew_dir/run/${name}.pid"
 
   _verify_pid_owner "$pid_file"
 }
 
 # Get agent status
+# Usage: get_agent_status <name> [crew_dir]
 get_agent_status() {
   local name="$1"
-  local crew_dir=".crew"
+  local crew_dir="${2:-.crew}"
   local pid_file="$crew_dir/run/${name}.pid"
   local log_file="$crew_dir/logs/${name}.log"
 
-  if is_agent_running "$name"; then
+  if is_agent_running "$name" "$crew_dir"; then
     local pid
     pid=$(_read_pid "$pid_file")
     echo "running:$pid"
@@ -950,12 +955,13 @@ get_agent_status() {
 }
 
 # Get agent PID
+# Usage: get_agent_pid <name> [crew_dir]
 get_agent_pid() {
   local name="$1"
-  local crew_dir=".crew"
+  local crew_dir="${2:-.crew}"
   local pid_file="$crew_dir/run/${name}.pid"
 
-  if is_agent_running "$name"; then
+  if is_agent_running "$name" "$crew_dir"; then
     _read_pid "$pid_file"
   else
     return 1
@@ -963,11 +969,13 @@ get_agent_pid() {
 }
 
 # Restart an agent
+# Usage: restart_agent <name> <config_file> [crew_dir]
 restart_agent() {
   local name="$1"
   local config_file="$2"
+  local crew_dir="${3:-.crew}"
 
-  stop_agent "$name"
+  stop_agent "$name" "$crew_dir"
   sleep 1
 
   # Get agent config and restart
@@ -976,15 +984,17 @@ restart_agent() {
   interval=$(config_get ".agents[] | select(.name == \"$name\") | .interval" "$DEFAULT_RESTART_DELAY" "$config_file")
 
   if [[ -n "$prompt_file" ]]; then
-    start_agent "$name" ".crew/$prompt_file" "$interval" "$PWD" "$config_file" || true
+    start_agent "$name" "$crew_dir/$prompt_file" "$interval" "$PWD" "$config_file" || true
   else
     log_error "[$name] Cannot restart: missing config"
   fi
 }
 
 # Start all agents from config
+# Usage: start_all_agents <config_file> [crew_dir]
 start_all_agents() {
   local config_file="$1"
+  local crew_dir="${2:-.crew}"
 
   if [[ ! -f "$config_file" ]]; then
     log_error "Config file not found: $config_file"
@@ -1017,7 +1027,7 @@ start_all_agents() {
       fi
     fi
 
-    start_agent "$name" ".crew/$prompt_file" "$interval" "$PWD" "$config_file" || true
+    start_agent "$name" "$crew_dir/$prompt_file" "$interval" "$PWD" "$config_file" || true
   done <<< "$agents"
 }
 
@@ -1120,10 +1130,11 @@ _get_descendant_pids() {
 
 # Phase 1: Collect progress signals for a running agent.
 # Tracks log file growth, working directory file changes, and child process tree.
-# Writes key=value signals to .crew/run/<AGENT>.progress, touches .lastcheck.
+# Writes key=value signals to <crew_dir>/run/<AGENT>.progress, touches .lastcheck.
+# Usage: _collect_progress_signals <name> [crew_dir]
 _collect_progress_signals() {
   local name="$1"
-  local crew_dir=".crew"
+  local crew_dir="${2:-.crew}"
   local progress_file="$crew_dir/run/${name}.progress"
   local lastcheck_file="$crew_dir/run/${name}.lastcheck"
   local log_file="$crew_dir/logs/${name}.log"
@@ -1193,10 +1204,11 @@ EOF
 #   PRODUCTIVE — agent is making real progress (file changes or active tools)
 #   LEGITIMATE — agent has active child processes (test runners, compilers)
 #   SUSPECT    — no meaningful progress for idle_timeout duration
+# Usage: _check_agent_progress <name> <idle_timeout> [crew_dir]
 _check_agent_progress() {
   local name="$1"
   local idle_timeout="$2"
-  local crew_dir=".crew"
+  local crew_dir="${3:-.crew}"
   local progress_file="$crew_dir/run/${name}.progress"
   local verdict_file="$crew_dir/run/${name}.verdict"
 
@@ -1278,10 +1290,11 @@ _check_agent_progress() {
 }
 
 # Build context file for AI judge evaluation
+# Usage: _build_judge_context <name> <output_file> [crew_dir]
 _build_judge_context() {
   local name="$1"
   local output_file="$2"
-  local crew_dir=".crew"
+  local crew_dir="${3:-.crew}"
   local log_file="$crew_dir/logs/${name}.log"
   local pid_file="$crew_dir/run/${name}.pid"
   local progress_file="$crew_dir/run/${name}.progress"
@@ -1300,7 +1313,7 @@ _build_judge_context() {
     echo ""
     echo "--- FILE CHANGES SINCE LAST CHECK ---"
     if [[ -f "$lastcheck_file" ]]; then
-      find . -newer "$lastcheck_file" -not -path "./.crew/*" \
+      find . -newer "$lastcheck_file" -not -path "./${crew_dir}/*" \
         -not -path "./.git/*" -not -path "./.design/*" \
         -type f 2>/dev/null | head -50 || echo "(none)"
     else
@@ -1373,12 +1386,13 @@ _export_judge_env() {
 # Builds context from log, file changes, and process tree, sends to AI,
 # and parses response for verdict: PRODUCTIVE / STUCK / UNCERTAIN.
 # Rate-limited to max 1 call per agent per MAX_AI_JUDGE_INTERVAL.
+# Usage: _invoke_ai_judge <name> <judge_type> <judge_prompt_template> <config_file> [crew_dir]
 _invoke_ai_judge() {
   local name="$1"
   local judge_type="$2"
   local judge_prompt_template="$3"
   local config_file="$4"
-  local crew_dir=".crew"
+  local crew_dir="${5:-.crew}"
   local progress_file="$crew_dir/run/${name}.progress"
   local wd_log="$crew_dir/logs/watchdog.log"
 
@@ -1450,11 +1464,12 @@ _invoke_ai_judge() {
 
 # Phase 4: Handle a stuck agent by taking the configured action.
 # Actions: fallback (advance chain), restart, notify (run command), stop.
+# Usage: _handle_stuck_agent <name> <action> <config_file> [crew_dir]
 _handle_stuck_agent() {
   local name="$1"
   local action="$2"
   local config_file="$3"
-  local crew_dir=".crew"
+  local crew_dir="${4:-.crew}"
   local wd_log="$crew_dir/logs/watchdog.log"
 
   echo "[watchdog] [$name] Action: $action at $(timestamp)" >> "$wd_log"
@@ -1509,11 +1524,13 @@ _handle_stuck_agent() {
 #   2. Progress checks (every watchdog.check_interval, T049): detect silent failures
 #      via log growth analysis, file change tracking, and optional AI judgment
 #
-# Started by crew_start() and stored in .crew/run/watchdog.pid for cleanup.
+# Started by crew_start() and stored in <crew_dir>/run/watchdog.pid for cleanup.
+# Usage: watchdog_loop <config_file> <check_interval> <crew_dir> [agent_names...]
 watchdog_loop() {
   local config_file="$1"
   local check_interval="${2:-$DEFAULT_CHECK_INTERVAL}"
-  shift 2
+  local crew_dir="${3:-.crew}"
+  shift 3
   local agents_args=("$@")
 
   log_info "Watchdog started (interval: ${check_interval}s)"
@@ -1531,7 +1548,7 @@ watchdog_loop() {
   ai_judge_prompt=$(config_get ".watchdog.ai_judge.prompt" "prompts/crew/watchdog.md" "$config_file" 2>/dev/null || echo "prompts/crew/watchdog.md")
 
   if [[ "$wd_enabled" == "true" ]]; then
-    ensure_dir ".crew/logs"
+    ensure_dir "$crew_dir/logs"
     log_info "Progress watchdog enabled (check: ${wd_check_interval}s, idle: ${wd_idle_timeout}s, action: $wd_on_stuck)"
     if [[ "$ai_judge_enabled" == "true" ]]; then
       log_info "AI judge enabled (type: $ai_judge_type)"
@@ -1541,7 +1558,7 @@ watchdog_loop() {
   local last_progress_check
   last_progress_check=$(date +%s)
 
-  local stop_sentinel=".crew/run/watchdog.stop"
+  local stop_sentinel="$crew_dir/run/watchdog.stop"
 
   # Use exit (not return) — watchdog runs in a subshell, and return only
   # exits _interruptible_sleep on bash 3.2, allowing the loop to continue.
@@ -1561,30 +1578,30 @@ watchdog_loop() {
     fi
 
     # ── Health checks (existing behavior) ──
-    while IFS= read -r name; do
-      [[ -z "$name" ]] && continue
-      # Bail out of health checks if stop was requested
-      [[ -f "$stop_sentinel" ]] && break
-      local status
-      status=$(get_agent_status "$name")
+        while IFS= read -r name; do
+          [[ -z "$name" ]] && continue
+          # Bail out of health checks if stop was requested
+          [[ -f "$stop_sentinel" ]] && break
+          local status
+          status=$(get_agent_status "$name" "$crew_dir")
 
       case "$status" in
         running:*)
           ;;
         stale)
           log_warn "[$name] Stale PID file, cleaning up..."
-          rm -f ".crew/run/${name}.pid"
-          restart_agent "$name" "$config_file"
+          rm -f "$crew_dir/run/${name}.pid"
+          restart_agent "$name" "$config_file" "$crew_dir"
           ;;
         stopped)
-          if [[ -f ".crew/run/${name}.exhausted" ]]; then
+          if [[ -f "$crew_dir/run/${name}.exhausted" ]]; then
             log_warn "[$name] All fallback levels exhausted, not restarting"
           else
             log_warn "[$name] Not running, starting..."
             local prompt_file interval
             prompt_file=$(config_get ".agents[] | select(.name == \"$name\") | .prompt" "" "$config_file")
             interval=$(config_get ".agents[] | select(.name == \"$name\") | .interval" "$DEFAULT_RESTART_DELAY" "$config_file")
-            start_agent "$name" ".crew/$prompt_file" "$interval" "$PWD" "$config_file"
+            start_agent "$name" "$crew_dir/$prompt_file" "$interval" "$PWD" "$config_file"
           fi
           ;;
       esac
@@ -1605,42 +1622,42 @@ watchdog_loop() {
         while IFS= read -r name; do
           [[ -z "$name" ]] && continue
           local status
-          status=$(get_agent_status "$name")
+          status=$(get_agent_status "$name" "$crew_dir")
 
           # Only monitor running agents
           [[ "$status" != running:* ]] && continue
 
           # Phase 1: Collect progress signals
-          _collect_progress_signals "$name"
+          _collect_progress_signals "$name" "$crew_dir"
 
           # Phase 2: Heuristic pre-filter
           local heuristic
-          heuristic=$(_check_agent_progress "$name" "$wd_idle_timeout")
+          heuristic=$(_check_agent_progress "$name" "$wd_idle_timeout" "$crew_dir")
 
           if [[ "$heuristic" == "SUSPECT" ]]; then
-            echo "[watchdog] [$name] Flagged SUSPECT at $(timestamp)" >> ".crew/logs/watchdog.log"
+            echo "[watchdog] [$name] Flagged SUSPECT at $(timestamp)" >> "$crew_dir/logs/watchdog.log"
 
             if [[ "$ai_judge_enabled" == "true" ]]; then
               # Phase 3: AI judge
               local verdict
-              verdict=$(_invoke_ai_judge "$name" "$ai_judge_type" "$ai_judge_prompt" "$config_file")
+              verdict=$(_invoke_ai_judge "$name" "$ai_judge_type" "$ai_judge_prompt" "$config_file" "$crew_dir")
 
               case "$verdict" in
                 STUCK)
-                  echo "STUCK" > ".crew/run/${name}.verdict"
-                  _handle_stuck_agent "$name" "$wd_on_stuck" "$config_file"
+                  echo "STUCK" > "$crew_dir/run/${name}.verdict"
+                  _handle_stuck_agent "$name" "$wd_on_stuck" "$config_file" "$crew_dir"
                   ;;
                 PRODUCTIVE)
-                  _write_progress_key ".crew/run/${name}.progress" "idle_since" "0"
-                  echo "PRODUCTIVE" > ".crew/run/${name}.verdict"
+                  _write_progress_key "$crew_dir/run/${name}.progress" "idle_since" "0"
+                  echo "PRODUCTIVE" > "$crew_dir/run/${name}.verdict"
                   ;;
                 *)
-                  echo "[watchdog] [$name] UNCERTAIN — grace period extended" >> ".crew/logs/watchdog.log"
+                  echo "[watchdog] [$name] UNCERTAIN — grace period extended" >> "$crew_dir/logs/watchdog.log"
                   ;;
               esac
             else
               # No AI judge: directly trigger on_stuck action
-              _handle_stuck_agent "$name" "$wd_on_stuck" "$config_file"
+              _handle_stuck_agent "$name" "$wd_on_stuck" "$config_file" "$crew_dir"
             fi
           fi
         done <<< "$agents"

@@ -13,9 +13,10 @@ DEFAULT_MONITOR_REFRESH=2
 DEFAULT_LOG_TAIL_LINES=50
 
 # Show status of all agents
+# Usage: show_status <config_file> [crew_dir]
 show_status() {
   local config_file="$1"
-  local crew_dir=".crew"
+  local crew_dir="${2:-.crew}"
 
   header "Crew Status"
 
@@ -46,7 +47,7 @@ show_status() {
   while IFS= read -r name; do
     [[ -z "$name" ]] && continue
     local status pid_display last_log icon color status_text level_display cli_type_display verdict_display
-    status=$(get_agent_status "$name")
+    status=$(get_agent_status "$name" "$crew_dir")
     level_display="-"
     cli_type_display="-"
     verdict_display="-"
@@ -107,15 +108,17 @@ show_status() {
 }
 
 # Real-time monitor (like htop for agents)
+# Usage: monitor_loop <config_file> <crew_dir> [refresh]
 monitor_loop() {
   local config_file="$1"
-  local refresh="${2:-$DEFAULT_MONITOR_REFRESH}"
+  local crew_dir="${2:-.crew}"
+  local refresh="${3:-$DEFAULT_MONITOR_REFRESH}"
 
   trap 'echo ""; return 0' INT TERM
 
   while true; do
     clear
-    show_status "$config_file"
+    show_status "$config_file" "$crew_dir"
     echo ""
     echo "Press Ctrl+C to exit. Refreshing every ${refresh}s..."
     sleep "$refresh"
@@ -123,10 +126,11 @@ monitor_loop() {
 }
 
 # Tail logs for an agent
+# Usage: tail_agent_log <name> <crew_dir> [lines]
 tail_agent_log() {
   local name="$1"
-  local lines="${2:-$DEFAULT_LOG_TAIL_LINES}"
-  local crew_dir=".crew"
+  local crew_dir="${2:-.crew}"
+  local lines="${3:-$DEFAULT_LOG_TAIL_LINES}"
 
   validate_agent_name "$name" || return 1
 
@@ -145,10 +149,11 @@ tail_agent_log() {
 }
 
 # Show specific agent info
+# Usage: show_agent_info <name> <config_file> [crew_dir]
 show_agent_info() {
   local name="$1"
   local config_file="$2"
-  local crew_dir=".crew"
+  local crew_dir="${3:-.crew}"
 
   header "Agent: $name"
 
@@ -189,7 +194,7 @@ show_agent_info() {
 
   # Status
   local status
-  status=$(get_agent_status "$name")
+  status=$(get_agent_status "$name" "$crew_dir")
   case "$status" in
     running:*)
       echo -e "Status: ${GREEN}Running${NC} (PID: ${status#running:})"
@@ -216,9 +221,10 @@ show_agent_info() {
 }
 # Generate a summary report of agent activity and file changes.
 # Parses agent logs for run statistics and uses git to detect conflicting changes.
+# Usage: show_report <config_file> [crew_dir]
 show_report() {
   local config_file="$1"
-  local crew_dir=".crew"
+  local crew_dir="${2:-.crew}"
 
   header "Crew Report"
 
@@ -265,7 +271,7 @@ show_report() {
 
     # Current status
     local status
-    status=$(get_agent_status "$name")
+    status=$(get_agent_status "$name" "$crew_dir")
     local status_label="stopped"
     case "$status" in
       running:*) status_label="running" ;;
@@ -395,9 +401,10 @@ _print_subtree() {
 }
 
 # Show active sub-processes for all agents
+# Usage: show_processes <config_file> [crew_dir]
 show_processes() {
   local config_file="$1"
-  local crew_dir=".crew"
+  local crew_dir="${2:-.crew}"
 
   header "Agent Process Tree"
 
@@ -419,7 +426,7 @@ show_processes() {
     local pid=""
     local pid_file="${crew_dir}/run/${name}.pid"
 
-    if is_agent_running "$name"; then
+    if is_agent_running "$name" "$crew_dir"; then
       pid=$(_read_pid "$pid_file")
     fi
 
