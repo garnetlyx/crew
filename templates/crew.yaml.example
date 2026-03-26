@@ -178,7 +178,7 @@ agents:
   - name: QA
     <<: *claude-claude
     icon: 🔴
-    prompt: prompts/qa.txt
+    prompt: prompts/qa.md
     interval: 10
     timeout: 600
 
@@ -199,7 +199,7 @@ agents:
   - name: DEV
     <<: *claude-default
     icon: 🔵
-    prompt: prompts/dev.txt
+    prompt: prompts/dev.md
     interval: 10
     timeout: 600
 
@@ -225,7 +225,7 @@ agents:
   - name: JANITOR
     <<: *claude-default
     icon: 🟢
-    prompt: prompts/janitor.txt
+    prompt: prompts/janitor.md
     interval: 1800     # 30 minutes - lightweight maintenance task
     timeout: 600
 
