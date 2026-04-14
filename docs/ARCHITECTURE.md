@@ -15,15 +15,15 @@ crew is a Bash-based multi-agent orchestration system with two operational modes
                           │    Multi-Agent Orchestration Tool    │
                           └─────────────────────────────────────┘
                                           │
-                    ┌─────────────────────┴─────────────────────┐
-                    │                                           │
-           ┌────────▼────────┐                        ┌─────────▼────────┐
-           │   Design Mode    │                        │    Crew Mode     │
-           │  (design.sh)     │                        │   (crew.sh)      │
-           │                  │                        │                  │
-           │  Design-Review    │                        │  Parallel Agents │
-           │  Writer ⇄ Review │                        │  + Watchdog      │
-           └──────────────────┘                        └──────────────────┘
+                 ┌────────────────────────┼────────────────────────┐
+                 │                        │                        │
+        ┌────────▼────────┐      ┌────────▼────────┐      ┌────────▼────────┐
+        │   Design Mode    │      │    Crew Mode     │      │   Audit Mode     │
+        │  (design.sh)     │      │   (crew.sh)      │      │ (crew.sh audit)  │
+        │                  │      │                  │      │                  │
+        │  Design-Review    │      │  Parallel Agents │      │  Ledger Driven   │
+        │  Writer ⇄ Review │      │  + Watchdog      │      │  + Strict Gates  │
+        └──────────────────┘      └──────────────────┘      └──────────────────┘
 ```
 
 ---
@@ -226,6 +226,40 @@ lib/
 │         │ .log file│    │ .log file│    │ .log file│             │
 │         └──────────┘    └──────────┘    └──────────┘             │
 │                                                                   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### 3.3 Audit Mode: Checklisted Execution
+
+```
+                               crew init audit
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                         Audit Execution                           │
+│                                                                   │
+│   ┌─────────────────────────────────────────────────────────┐    │
+│   │                    Watchdog Loop                         │    │
+│   │                                                          │    │
+│   │  1. Check worker health (restart environment errors)     │    │
+│   │  2. Release stale inventory claims                       │    │
+│   │  3. Verify completion (if queue is fully empty)          │    │
+│   └─────────────────────────────────────────────────────────┘    │
+│                                                                   │
+│         ┌──────────┐                     ┌──────────┐            │
+│         │ AUDITOR  │                     │ REVIEWER │            │
+│         │  Agent   │                     │  Agent   │            │
+│         └────┬─────┘                     └────┬─────┘            │
+│              │                                │                   │
+│         ┌────▼─────┐                     ┌────▼─────┐            │
+│         │  Claim   │                     │  Claim   │            │
+│         │   row    │                     │   row    │            │
+│         └────┬─────┘                     └────┬─────┘            │
+│              │                                │                   │
+│     ┌────────▼────────────────────────────────▼─────────┐        │
+│     │            .crew/state/audit-results.json         │        │
+│     │                   (Ledger Truth)                  │        │
+│     └───────────────────────────────────────────────────┘        │
 └──────────────────────────────────────────────────────────────────┘
 ```
 

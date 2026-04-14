@@ -166,13 +166,13 @@ print(json.dumps({
 # ── Row Counters ─────────────────────────────────────────────────────────────
 
 # Count rows by status from the inventory JSON.
-# Outputs: pending claimed audited reviewed skipped backoff (space-separated)
+# Outputs: pending claimed audited reviewed skipped backoff failed (space-separated)
 # Usage: audit_count_rows <inventory_path>
 audit_count_rows() {
   local inventory_path="$1"
 
   if [[ ! -f "$inventory_path" ]]; then
-    echo "0 0 0 0 0 0"
+    echo "0 0 0 0 0 0 0"
     return 0
   fi
 
@@ -180,7 +180,7 @@ audit_count_rows() {
 import json, sys
 with open(sys.argv[1]) as f:
     rows = json.load(f)
-pending = claimed = audited = reviewed = skipped = backoff = 0
+pending = claimed = audited = reviewed = skipped = backoff = failed = 0
 for r in rows:
     s = r.get("status", "pending")
     if   s == "pending":  pending  += 1
@@ -189,8 +189,9 @@ for r in rows:
     elif s == "reviewed": reviewed += 1
     elif s == "skipped":  skipped  += 1
     elif s == "backoff":  backoff  += 1
+    elif s == "failed":   failed   += 1
     else:                 pending  += 1  # unknown = treat as pending
-print(pending, claimed, audited, reviewed, skipped, backoff)
+print(pending, claimed, audited, reviewed, skipped, backoff, failed)
 PYEOF
 }
 
@@ -297,6 +298,33 @@ os.rename(tmp, path)
 PYEOF
 
   _audit_release_lock "$state_dir"
+}
+
+# Check if an agent currently has a claimed row.
+# Prints the row ID if found, otherwise empty string.
+# Usage: audit_get_claimed_row <inventory_path> <worker_name>
+audit_get_claimed_row() {
+  local inventory_path="$1"
+  local worker_name="$2"
+
+  [[ ! -f "$inventory_path" ]] && return 0
+
+  python3 - "$inventory_path" "$worker_name" <<'PYEOF'
+import json, sys
+path   = sys.argv[1]
+worker = sys.argv[2]
+
+try:
+    with open(path) as f:
+        rows = json.load(f)
+    for row in rows:
+        if row.get("status") == "claimed" and row.get("claimed_by" ) == worker:
+            print(row.get("id", ""))
+            sys.exit(0)
+except Exception:
+    pass
+print("")
+PYEOF
 }
 
 # ── Update Row ────────────────────────────────────────────────────────────────

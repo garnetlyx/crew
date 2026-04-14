@@ -13,11 +13,100 @@ STATUS_TABLE_WIDTH=92
 DEFAULT_MONITOR_REFRESH=2
 DEFAULT_LOG_TAIL_LINES=50
 
+# Show status of all agents (Audit Mode Dashboard)
+# Usage: show_audit_dashboard <config_file> [crew_dir]
+show_audit_dashboard() {
+  local config_file="$1"
+  local crew_dir="${2:-.crew}"
+
+  header "Audit Dashboard"
+
+  if [[ ! -f "$config_file" ]]; then
+    log_error "No config found. Run 'crew init' first."
+    return 1
+  fi
+
+  # Get project name
+  local project
+  project=$(config_get ".project" "$(basename "$PWD")" "$config_file")
+  echo "Project: $project"
+  echo ""
+
+  # Show primary ledger progress first
+  show_audit_counters "$config_file" "$crew_dir"
+  echo ""
+
+  # Get agent list
+  local agents
+  agents=$(config_get ".agents[].name" "" "$config_file")
+
+  if [[ -z "$agents" ]]; then
+    log_warn "No workers configured"
+    return 0
+  fi
+
+  echo -e "${BOLD}Active Workers${NC}"
+  separator "-" 80
+  printf "%-15s %-12s %-15s %-15s %-20s\n" "WORKER" "STATUS" "PID" "STATE" "LAST LOG"
+  separator "-" 80
+
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    local status pid_display last_log icon color status_text verdict_display
+    status=$(get_agent_status "$name" "$crew_dir")
+    verdict_display="-"
+
+    case "$status" in
+      running:*)
+        pid_display="${status#running:}"
+        icon=$(config_get ".agents[] | select(.name == \"$name\") | .icon" "🔵" "$config_file")
+        color="$GREEN"
+        status_text="running"
+        # Read verdict from progress watchdog
+        local verdict_file="$crew_dir/run/${name}.verdict"
+        if [[ -f "$verdict_file" ]]; then
+          verdict_display=$(cat "$verdict_file")
+        fi
+        ;;
+      stale)
+        pid_display="-"
+        icon="⚠️"
+        color="$YELLOW"
+        status_text="stale"
+        ;;
+      stopped)
+        pid_display="-"
+        icon="⭕"
+        color="$RED"
+        status_text="stopped"
+        if [[ -f "$crew_dir/run/${name}.exhausted" ]]; then
+          status_text="exhausted"
+        fi
+        ;;
+    esac
+
+    # Get last log line
+    local log_file="$crew_dir/logs/${name}.log"
+    if [[ -f "$log_file" ]]; then
+      last_log=$(tail -1 "$log_file" 2>/dev/null | awk -v len="$LOG_TRUNCATE_LENGTH" '{print substr($0, 1, len)}')
+    else
+      last_log="-"
+    fi
+
+    printf "${color}%-15s %-12s %-15s %-15s %-20s${NC}\n" "$icon $name" "$status_text" "$pid_display" "$verdict_display" "$last_log"
+  done <<< "$agents"
+}
+
 # Show status of all agents
 # Usage: show_status <config_file> [crew_dir]
 show_status() {
   local config_file="$1"
   local crew_dir="${2:-.crew}"
+
+  if type is_audit_mode &>/dev/null && is_audit_mode "$config_file" 2>/dev/null; then
+    show_audit_dashboard "$config_file" "$crew_dir"
+    return 0
+  fi
 
   header "Crew Status"
 
@@ -107,8 +196,8 @@ show_status() {
 
   echo ""
 
-  # Audit mode: append inventory counters when audit: section is present
-  if is_audit_mode "$config_file" 2>/dev/null; then
+  # Audit mode: append inventory counters when audit: section is present (Fallback logic)
+  if type is_audit_mode &>/dev/null && is_audit_mode "$config_file" 2>/dev/null; then
     show_audit_counters "$config_file" "$crew_dir"
   fi
 }

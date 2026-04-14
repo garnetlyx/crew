@@ -2,7 +2,7 @@
 # Crew Configuration — Audit Mode
 # ══════════════════════════════════════════════════════════════════════
 # Audit mode is for long-running, evidence-first checklist workflows:
-#   - migration audits
+#   - massive document reviews
 #   - data integrity checks
 #   - checklist verification
 #   - evidence review
@@ -82,12 +82,16 @@ agents:
     timeout: 300
     max_restarts: 3
 
-  # ── REFEREE (optional) ───────────────────────────────────────────────
-  # Uncomment to add a tiebreaker role for AUDITOR/REVIEWER disagreements.
+  # ── REFEREE ───────────────────────────────────────────────
+  # Acts as an adjudicator for AUDITOR/REVIEWER disagreements.
+  # If the Reviewer marks a row as `disputed` or `failed`, the Referee
+  # breaks the tie or escalates to `backoff` for human intervention.
+  # ────────────────────────────────────────────────────────────────────
+  # Uncomment the block below to enable the REFEREE agent.
   # - name: REFEREE
   #   icon: "⚖️"
   #   type: claude
   #   prompt: prompts/referee.md
-  #   interval: 30
+  #   interval: 10
   #   timeout: 300
-  #   max_restarts: 2
+  #   max_restarts: 3

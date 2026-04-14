@@ -667,6 +667,9 @@ start_agent() {
         rotate_log_if_needed "$log_file"
         echo "[$name] Starting at $(timestamp) [$level_label] (type: $cli_type)" >> "$log_file"
 
+        local _start_ts
+        _start_ts=$(date +%s)
+
         # Inject shared context into prompt (T065)
         local effective_prompt
         effective_prompt=$(_build_shared_prompt "$prompt_file" "$crew_dir")
@@ -758,25 +761,45 @@ start_agent() {
           restart_count=0
           delay="$interval"
         else
-          # Error: increment restart count
-          restart_count=$((restart_count + 1))
-          if [[ "$restart_count" -ge "$level_max_restarts" ]]; then
-            echo "[$name] Max restarts ($level_max_restarts) reached at level: $level_label" >> "$log_file"
-            break  # Break inner loop → try next fallback level
-          fi
-          # Exponential backoff: interval * 2^(n-1), capped at MAX_BACKOFF_DELAY
-          # Handle edge case: when restart_count=0, use interval directly (avoid 1 << -1)
-          if [[ "$restart_count" -le 0 ]]; then
-            delay="$interval"
-          else
-            local exp=$((restart_count - 1))
-            [[ "$exp" -gt 6 ]] && exp=6  # cap at 64x to prevent 64-bit overflow
-            delay=$((interval * (1 << exp)))
-            if [[ "$delay" -gt "$MAX_BACKOFF_DELAY" ]]; then
-              delay="$MAX_BACKOFF_DELAY"
+          local _is_row_failure=false
+          if type is_audit_mode &>/dev/null && is_audit_mode "$config_file" 2>/dev/null; then
+            local _inv
+            _inv=$(audit_inventory_path "$config_file" 2>/dev/null || echo "")
+            if [[ -n "$_inv" && -f "$_inv" ]]; then
+              local _claim
+              _claim=$(audit_get_claimed_row "$_inv" "$name" 2>/dev/null || echo "")
+              if [[ -n "$_claim" ]]; then
+                _is_row_failure=true
+                echo "[$name] Exited mid-flight while holding a claim. Decoupling row failure for '$_claim'." >> "$log_file"
+                audit_release_row "$_inv" "$_claim" "Agent exited with code $exit_code"
+              fi
             fi
           fi
-          echo "[$name] Error restart $restart_count/$level_max_restarts [$level_label] (backoff: ${delay}s)" >> "$log_file"
+
+          if $_is_row_failure; then
+            # Row decoupled error: agent lifecycle survives, standard polling applies
+            delay="$interval"
+          else
+            # Error: increment restart count
+            restart_count=$((restart_count + 1))
+            if [[ "$restart_count" -ge "$level_max_restarts" ]]; then
+              echo "[$name] Max restarts ($level_max_restarts) reached at level: $level_label" >> "$log_file"
+              break  # Break inner loop → try next fallback level
+            fi
+            # Exponential backoff: interval * 2^(n-1), capped at MAX_BACKOFF_DELAY
+            # Handle edge case: when restart_count=0, use interval directly (avoid 1 << -1)
+            if [[ "$restart_count" -le 0 ]]; then
+              delay="$interval"
+            else
+              local exp=$((restart_count - 1))
+              [[ "$exp" -gt 6 ]] && exp=6  # cap at 64x to prevent 64-bit overflow
+              delay=$((interval * (1 << exp)))
+              if [[ "$delay" -gt "$MAX_BACKOFF_DELAY" ]]; then
+                delay="$MAX_BACKOFF_DELAY"
+              fi
+            fi
+            echo "[$name] Error restart $restart_count/$level_max_restarts [$level_label] (backoff: ${delay}s)" >> "$log_file"
+          fi
         fi
 
         # Wait before restart
@@ -1535,6 +1558,10 @@ watchdog_loop() {
 
   log_info "Watchdog started (interval: ${check_interval}s)"
 
+  local checkpoint_every
+  checkpoint_every=$(config_get ".checkpoint_every" "10" "$config_file" 2>/dev/null || echo "10")
+  local _last_total_completed=0
+
   # Read progress watchdog config
   local wd_enabled wd_check_interval wd_idle_timeout wd_on_stuck
   wd_enabled=$(config_get ".watchdog.enabled" "false" "$config_file" 2>/dev/null || echo "false")
@@ -1661,6 +1688,51 @@ watchdog_loop() {
             fi
           fi
         done <<< "$agents"
+      fi
+    fi
+    # ── Audit Mode Supervisor Semantics (Phase 2) ──
+    if type is_audit_mode &>/dev/null && is_audit_mode "$config_file" 2>/dev/null; then
+      local _inv
+      _inv=$(audit_inventory_path "$config_file" 2>/dev/null || echo "")
+      if [[ -n "$_inv" && -f "$_inv" ]]; then
+        # 1. Stale claim cleanup
+        # Resolves edge cases where agents lock rows and then die ungracefully
+        audit_release_stale_claims "$_inv" 30 >/dev/null 2>&1
+
+        # 2. Status Polling & Checkpoint Trigger
+        local _counts
+        _counts=$(audit_count_rows "$_inv" 2>/dev/null || echo "0 0 0 0 0 0 0")
+        local _pending _claimed _audited _reviewed _skipped _backoff _failed
+        read -r _pending _claimed _audited _reviewed _skipped _backoff _failed <<< "$_counts"
+
+        local _current_total_completed=$(( _audited + _reviewed + _skipped + _failed ))
+        if [[ "$_current_total_completed" -gt "$_last_total_completed" ]]; then
+          local _delta=$(( _current_total_completed - _last_total_completed ))
+          if [[ "$_delta" -ge "$checkpoint_every" ]]; then
+            audit_checkpoint "$_inv" >/dev/null 2>&1
+            _last_total_completed="$_current_total_completed"
+          fi
+        fi
+
+        # 3. Strong Completion Gate & Deadlock Semantics
+        # Prevent race condition: ensure no active claims before firing completion check
+        if [[ "$_claimed" -eq 0 && "$_pending" -eq 0 && "$_backoff" -eq 0 ]]; then
+          if audit_check_completion "$config_file" "$_inv" >/dev/null 2>&1; then
+            echo "[watchdog] Audit mode completion passed. Shutting down." >> "$crew_dir/logs/watchdog.log"
+            log_ok "Audit completion check PASSED! All work verified. Spinning down agents..."
+            audit_render_report "$config_file" "$crew_dir" >/dev/null 2>&1
+            rm -f "$stop_sentinel"
+            stop_all_agents "$crew_dir" >/dev/null 2>&1
+            exit 0
+          else
+            echo "[watchdog] Audit mode Deadlock discovered. Shutting down." >> "$crew_dir/logs/watchdog.log"
+            log_error "Audit DEADLOCK detected! Queue exhausted but completion check failed ($_failed terminal failures)."
+            audit_render_report "$config_file" "$crew_dir" >/dev/null 2>&1
+            rm -f "$stop_sentinel"
+            stop_all_agents "$crew_dir" >/dev/null 2>&1
+            exit 2
+          fi
+        fi
       fi
     fi
   done

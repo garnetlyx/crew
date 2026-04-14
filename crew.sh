@@ -60,9 +60,8 @@ ${BOLD}USAGE${NC}
   crew <command> [options]
 
 ${BOLD}COMMANDS${NC}
-  init [--template T]       Create .crew/ with config (optionally from template)
-  init [--mode audit]       Create .crew/ with audit mode scaffold
-  init audit                Shorthand for --mode audit
+  init [--template T]       Create .crew/ workspace (optionally from template)
+  init audit                Initialize an evidence-first Audit Mode workspace
   start [AGENT...]          Start all or specific agents
   stop [AGENT...]           Stop all or specific agents
   restart [AGENT...]        Restart agent(s)
@@ -110,6 +109,18 @@ ${BOLD}EXAMPLES${NC}
 
   # Monitor in real-time
   crew monitor
+
+  # View runtime and cost
+  crew cost
+
+${BOLD}AUDIT MODE EXAMPLES${NC}
+  # Audit Mode is a first-class evidence-based execution ledger
+  # 1. Initialize Audit Mode
+  crew init audit
+  
+  # 2. Add pending rows to .crew/state/audit-results.json
+  # 3. Start the audit orchestrator
+  crew start
 
   # Edit agent prompt
   crew edit QA
@@ -560,6 +571,54 @@ crew_cost() {
   show_cost "$CONFIG_FILE" "$CREW_DIR"
 }
 
+# Formal Audit Mode Subsystem
+crew_audit() {
+  local subcmd="${1:-}"
+  shift 2>/dev/null || true
+
+  if [[ -z "$subcmd" ]]; then
+    log_error "Usage: crew audit <command>"
+    echo "Commands: init, start, status, monitor, report, checkpoint, resume, rollback"
+    return 1
+  fi
+
+  case "$subcmd" in
+    init)
+      crew_init --mode audit "$@"
+      ;;
+    start)
+      crew_start "$@"
+      ;;
+    status)
+      crew_status
+      ;;
+    monitor)
+      crew_monitor
+      ;;
+    report)
+      audit_render_report "$CONFIG_FILE" "$CREW_DIR" || log_error "Failed to render audit report."
+      ;;
+    checkpoint)
+      local inv
+      inv=$(audit_inventory_path "$CONFIG_FILE" 2>/dev/null || echo "")
+      if [[ -n "$inv" && -f "$inv" ]]; then
+        audit_checkpoint "$inv"
+      else
+        log_error "Audit inventory not found."
+      fi
+      ;;
+    resume|rollback)
+      log_info "Audit mode resume/rollback is natively handled via checkpoints."
+      log_info "1. Look in '.crew/state/checkpoints/' for historical '.json' backups."
+      log_info "2. Copy your desired backup over '.crew/state/audit-results.json' to restore state."
+      log_info "3. Run 'crew start' to resume execution from the restored ledger."
+      ;;
+    *)
+      log_error "Unknown audit command: $subcmd"
+      ;;
+  esac
+}
+
 # Show aggregated report
 crew_report() {
   if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -734,6 +793,9 @@ main() {
       ;;
     cost)
       crew_cost
+      ;;
+    audit)
+      crew_audit "$@"
       ;;
     serve)
       crew_serve "$@"

@@ -11,12 +11,13 @@
 
 ## Overview
 
-`crew` provides two distinct modes for AI agent orchestration:
+`crew` provides three distinct modes for AI agent orchestration:
 
 | Command | Mode | Use Case |
 |---------|------|----------|
 | `design` | Design-Review | Refine ideas into polished design docs |
-| `crew` | Parallel Agents | Run multiple AI agents for debugging/optimization |
+| `crew` | Parallel Agents | Run open-ended AI agents for debugging/fixing |
+| `crew` (Audit) | Ledger Audit | Run structured, massive document reviews and scale-out audits |
 
 ## Installation
 
@@ -121,6 +122,52 @@ design status
 ├── review.md       # Current review
 └── history/        # All iterations
 ```
+
+## `crew` - Audit Mode
+
+Run structured, evidence-first execution ledgers. Perfect for massive document reviews, large-scale code refactors, or security audits where "done" must be proven line-by-line.
+
+```bash
+# Initialize an Audit Mode workspace
+crew init audit
+
+# 1. Provide an inventory file (e.g. .crew/state/audit-results.json)
+# 2. Start the audit orchestrator
+crew start
+
+# View the real-time Ledger Dashboard
+crew monitor
+```
+
+### How it works
+
+Unlike parallel Dev agents, Audit agents claim predefined tasks (rows) from a JSON ledger.
+Row-specific failures invoke backoff mechanics only for that row, isolating faults from the agent's lifecycle. The workflow automatically completes and shuts down agents cleanly once the ledger queue hits zero.
+
+### 1. The Inventory Contract
+Audit Mode workflows are powered by a JSON inventory file located at `.crew/state/audit-results.json` (or configured via `crew.yaml`). This file dictates everything the workers will do.
+A basic row looks like this:
+```json
+[
+  {
+    "id": "file_1.txt",
+    "status": "pending",
+    "context": "Migrate specific function signature."
+  }
+]
+```
+Agents will loop, claiming any row in `pending` or `backoff` (if the timeout expired), executing their prompts, and releasing the row as either `audited`, `reviewed`, `skipped`, or `failed`.
+
+### 2. Checkpoints and Resume/Rollback
+Audit mode treats the JSON ledger as a transactional database. You can rewind history manually:
+- The system takes automatic snapshots governed by `checkpoint_every` in `crew.yaml` (default: 10 rows).
+- **Resume**: Stop the orchestrator (`crew stop`), change logic or prompts, and `crew start`. It gracefully resumes from the pending rows in the ledger.
+- **Rollback**: Look inside `.crew/state/checkpoints/` for historical JSON backups. To revert the workflow, simply copy the backup over `.crew/state/audit-results.json` and run `crew start`.
+
+### 3. Deadlock Semantics vs Completion
+Audit mode utilizes a strict completion gate:
+- **Successful Completion**: The queue hits zero, and all rows reside in a final state (`reviewed` or `skipped`). The system renders an audit report and shuts down cleanly.
+- **Deadlock / Starvation**: The queue hits zero, but rows linger in terminal `failed` states. The Watchdog detects that no valid work remains. It outputs a `DEADLOCK` warning, prints the report, and halts the execution, allowing you to explicitly fix the stubborn rows.
 
 ## `crew` - Parallel Agents Mode
 
