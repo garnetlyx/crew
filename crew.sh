@@ -31,6 +31,7 @@ source "$SCRIPT_DIR/lib/watchdog.sh"
 source "$SCRIPT_DIR/lib/status.sh"
 source "$SCRIPT_DIR/lib/cost.sh"
 source "$SCRIPT_DIR/lib/probe.sh"
+source "$SCRIPT_DIR/lib/audit.sh"
 
 VERSION=$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown")
 CREW_DIR=".crew"
@@ -59,22 +60,24 @@ ${BOLD}USAGE${NC}
   crew <command> [options]
 
 ${BOLD}COMMANDS${NC}
-  init [--template T]  Create .crew/ with config (optionally from template)
-  start [AGENT...]     Start all or specific agents
-  stop [AGENT...]      Stop all or specific agents
-  restart [AGENT...]   Restart agent(s)
-  status               Show agent status
-  ps                   Show active agent processes
-  monitor              Real-time dashboard
-  logs <AGENT>         Tail agent logs
-  report               Show agent activity summary and conflicts
-  cost                 Show runtime and cost estimates per agent
-  context [show|edit|clear]  Manage shared context between agents
-  plugins              List available CLI plugins
-  edit <AGENT>         Edit agent prompt in \$EDITOR
-  serve --mcp          Start MCP server (JSON-RPC over stdio)
-  validate             Check config syntax
-  help                 Show this help
+  init [--template T]       Create .crew/ with config (optionally from template)
+  init [--mode audit]       Create .crew/ with audit mode scaffold
+  init audit                Shorthand for --mode audit
+  start [AGENT...]          Start all or specific agents
+  stop [AGENT...]           Stop all or specific agents
+  restart [AGENT...]        Restart agent(s)
+  status                    Show agent status (and audit counters in audit mode)
+  ps                        Show active agent processes
+  monitor                   Real-time dashboard
+  logs <AGENT>              Tail agent logs
+  report                    Show agent activity summary and conflicts
+  cost                      Show runtime and cost estimates per agent
+  context [show|edit|clear] Manage shared context between agents
+  plugins                   List available CLI plugins
+  edit <AGENT>              Edit agent prompt in \$EDITOR
+  serve --mcp               Start MCP server (JSON-RPC over stdio)
+  validate                  Check config syntax
+  help                      Show this help
 
 ${BOLD}OPTIONS${NC}
   --check-interval N   Health check interval in seconds (default: 30)
@@ -169,6 +172,7 @@ crew_list_templates() {
 # Initialize crew in current directory
 crew_init() {
   local template=""
+  local mode=""
 
   # Parse init-specific flags
   while [[ $# -gt 0 ]]; do
@@ -179,9 +183,20 @@ crew_init() {
         template="$1"
         shift
         ;;
+      --mode)
+        shift
+        [[ $# -eq 0 ]] && { log_error "--mode requires a value (e.g. audit)"; return 1; }
+        mode="$1"
+        shift
+        ;;
       --list-templates)
         crew_list_templates
         return 0
+        ;;
+      audit)
+        # Bare 'audit' arg is shorthand for --mode audit
+        mode="audit"
+        shift
         ;;
       *)
         log_error "Unknown option for init: $1"
@@ -189,6 +204,15 @@ crew_init() {
         ;;
     esac
   done
+
+  # --mode audit resolves to the 'audit' workflow template
+  if [[ -n "$mode" ]]; then
+    if [[ "$mode" != "audit" ]]; then
+      log_error "Unknown mode: $mode (only 'audit' is supported)"
+      return 1
+    fi
+    template="audit"
+  fi
 
   header "Initializing Crew"
 
@@ -272,7 +296,18 @@ crew_init() {
   echo ""
   log_info "Crew initialized!"
   log_info "Edit $CONFIG_FILE to configure agents"
-  log_info "Run 'crew start' to begin"
+
+  # Audit-mode post-init: create state directories and empty inventory
+  if [[ -n "$template" && "$template" == "audit" ]]; then
+    log_info "Initializing audit state directories..."
+    audit_init_state "$CREW_DIR"
+    log_info "Audit init complete!"
+    log_info "  Populate $CREW_DIR/state/audit-results.json with your inventory rows."
+    log_info "  Each row: { \"id\": \"...\", \"status\": \"pending\", ... }"
+    log_info "  Then run: crew start"
+  else
+    log_info "Run 'crew start' to begin"
+  fi
 }
 
 # Start agents

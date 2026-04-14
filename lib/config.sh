@@ -625,6 +625,64 @@ validate_config() {
     done <<< "$agents"
   fi
 
+  # ── Audit section validation ──────────────────────────────────────────────
+  local audit_section
+  audit_section=$(config_get ".audit" "" "$config_file" 2>/dev/null)
+  if [[ -n "$audit_section" && "$audit_section" != "null" ]]; then
+
+    local audit_inventory
+    audit_inventory=$(config_get ".audit.inventory" "" "$config_file" 2>/dev/null)
+    if [[ -n "$audit_inventory" && "$audit_inventory" != "null" ]]; then
+      if [[ "$audit_inventory" == /* ]]; then
+        log_error "audit.inventory must be a relative path: $audit_inventory"
+        has_error=true
+      fi
+      if [[ "$audit_inventory" == *".."* ]]; then
+        log_error "audit.inventory must not contain path traversal: $audit_inventory"
+        has_error=true
+      fi
+    fi
+
+    local audit_checkpoint_every
+    audit_checkpoint_every=$(config_get ".audit.checkpoint_every" "" "$config_file" 2>/dev/null)
+    if [[ -n "$audit_checkpoint_every" && "$audit_checkpoint_every" != "null" ]]; then
+      if ! echo "$audit_checkpoint_every" | grep -qE '^[0-9]+$' || [[ "$audit_checkpoint_every" -lt 1 ]]; then
+        log_error "audit.checkpoint_every must be a positive integer: $audit_checkpoint_every"
+        has_error=true
+      fi
+    fi
+
+    local audit_backoff
+    audit_backoff=$(config_get ".audit.enable_row_backoff" "" "$config_file" 2>/dev/null)
+    if [[ -n "$audit_backoff" && "$audit_backoff" != "null" ]]; then
+      if [[ "$audit_backoff" != "true" && "$audit_backoff" != "false" ]]; then
+        log_error "audit.enable_row_backoff must be true or false: $audit_backoff"
+        has_error=true
+      fi
+    fi
+
+    local audit_completion_cmd
+    audit_completion_cmd=$(config_get ".audit.completion_command" "" "$config_file" 2>/dev/null)
+    if [[ -n "$audit_completion_cmd" && "$audit_completion_cmd" != "null" ]]; then
+      if [[ "$audit_completion_cmd" == *".."* ]]; then
+        log_error "audit.completion_command must not contain path traversal: $audit_completion_cmd"
+        has_error=true
+      fi
+    fi
+
+    local audit_report_cmd
+    audit_report_cmd=$(config_get ".audit.report_command" "" "$config_file" 2>/dev/null)
+    if [[ -n "$audit_report_cmd" && "$audit_report_cmd" != "null" ]]; then
+      if [[ "$audit_report_cmd" == *".."* ]]; then
+        log_error "audit.report_command must not contain path traversal: $audit_report_cmd"
+        has_error=true
+      fi
+    fi
+
+    log_info "Audit mode config: inventory=${audit_inventory:-default}, checkpoint_every=${audit_checkpoint_every:-10}"
+  fi
+  # ─────────────────────────────────────────────────────────────────────────
+
   if $has_error; then
     return 1
   fi

@@ -2,8 +2,6 @@
 .crew/
 .design/
 
-# Evaluation files (local only)
-docs/EVAL.md
 
 # macOS
 .DS_Store
@@ -17,5 +15,8 @@ docs/EVAL.md
 .crew/crew.local.yaml
 .crew/.env
 .design/design.local.yaml
-docs/SESSION_LOG.md
-docs/TASKS.md
+
+# Docs (Only track specific core files to prevent AI clutter)
+docs/*
+!docs/ARCHITECTURE.md
+!docs/PRD.md

@@ -1,0 +1,93 @@
+# ══════════════════════════════════════════════════════════════════════
+# Crew Configuration — Audit Mode
+# ══════════════════════════════════════════════════════════════════════
+# Audit mode is for long-running, evidence-first checklist workflows:
+#   - migration audits
+#   - data integrity checks
+#   - checklist verification
+#   - evidence review
+#
+# Key differences from development crew:
+#   - Fixed inventory instead of open-ended task discovery
+#   - Structured state (audit-results.json) as source of truth
+#   - Row-level failure isolation (not process-level escalation)
+#   - Deterministic completion gate (not "model says done")
+#   - Stop/resume/checkpoint as first-class operations
+#
+# ── Getting Started ──
+#   1. Populate .crew/state/audit-results.json with your inventory rows.
+#      Each row must have at minimum: { "id": "...", "status": "pending" }
+#   2. Edit the agent prompts in .crew/prompts/ for your domain.
+#   3. Run: crew start
+#
+# ── Audit State Machine per Row ──
+#   pending → claimed → audited → reviewed
+#                ↓          ↓
+#             backoff     backoff
+# ══════════════════════════════════════════════════════════════════════
+
+project: my-project
+check_interval: 30
+
+# ── Audit Mode Configuration ──────────────────────────────────────────
+# inventory:          Path to the structured state file (ground truth).
+# completion_command: Shell command that exits 0 when audit is complete.
+#                     Leave empty to use built-in row-count check.
+# report_command:     Shell command to render the human-readable report.
+#                     Leave empty to use built-in markdown renderer.
+# enable_row_backoff: Park failing rows instead of crashing the agent.
+# checkpoint_every:   Copy state snapshot every N row completions.
+# ─────────────────────────────────────────────────────────────────────
+audit:
+  inventory: .crew/state/audit-results.json
+  completion_command: ./scripts/check_audit_completion.sh
+  report_command: ./scripts/render_audit_report.sh
+  enable_row_backoff: true
+  checkpoint_every: 10
+
+# ── Progress Watchdog ──────────────────────────────────────────────────
+# In audit mode, row failures do NOT count as agent failure.
+# Restarts are for process death only — not normal adjudication misses.
+# on_stuck: notify is the safe default (avoids disruptive fallbacks mid-row).
+# ─────────────────────────────────────────────────────────────────────
+watchdog:
+  enabled: true
+  check_interval: 60
+  idle_timeout: 600
+  on_stuck: notify
+
+agents:
+
+  # ── AUDITOR ──────────────────────────────────────────────────────────
+  # Claims one row at a time, collects evidence, writes structured output.
+  # Must NOT invent tasks or explore beyond the current inventory row.
+  # ────────────────────────────────────────────────────────────────────
+  - name: AUDITOR
+    icon: "🔍"
+    type: claude
+    prompt: prompts/auditor.md
+    interval: 5
+    timeout: 300
+    max_restarts: 3
+
+  # ── REVIEWER ─────────────────────────────────────────────────────────
+  # Reads AUDITOR output, verifies evidence, writes independent verdict.
+  # Must NOT re-audit from scratch — verify the AUDITOR's recorded evidence.
+  # ────────────────────────────────────────────────────────────────────
+  - name: REVIEWER
+    icon: "✅"
+    type: claude
+    prompt: prompts/reviewer.md
+    interval: 5
+    timeout: 300
+    max_restarts: 3
+
+  # ── REFEREE (optional) ───────────────────────────────────────────────
+  # Uncomment to add a tiebreaker role for AUDITOR/REVIEWER disagreements.
+  # - name: REFEREE
+  #   icon: "⚖️"
+  #   type: claude
+  #   prompt: prompts/referee.md
+  #   interval: 30
+  #   timeout: 300
+  #   max_restarts: 2

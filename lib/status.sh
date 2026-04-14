@@ -5,6 +5,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/config.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/watchdog.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/audit.sh"
 
 # Constants
 LOG_TRUNCATE_LENGTH=30
@@ -105,6 +106,11 @@ show_status() {
   done <<< "$agents"
 
   echo ""
+
+  # Audit mode: append inventory counters when audit: section is present
+  if is_audit_mode "$config_file" 2>/dev/null; then
+    show_audit_counters "$config_file" "$crew_dir"
+  fi
 }
 
 # Real-time monitor (like htop for agents)
